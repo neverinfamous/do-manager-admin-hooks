@@ -1,17 +1,20 @@
-# @do-manager/admin-hooks
+# do-manager-admin-hooks
 
-Admin hooks for Cloudflare Durable Objects that enable integration with [Durable Object Manager](https://do.adamic.tech).
+[![npm](https://img.shields.io/npm/v/do-manager-admin-hooks)](https://www.npmjs.com/package/do-manager-admin-hooks)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+
+Admin hooks for Cloudflare Durable Objects that enable integration with [DO Manager](https://do.adamic.tech).
 
 ## Installation
 
 ```bash
-npm install @do-manager/admin-hooks
+npm install do-manager-admin-hooks
 ```
 
 ## Quick Start
 
 ```typescript
-import { withAdminHooks } from '@do-manager/admin-hooks';
+import { withAdminHooks } from 'do-manager-admin-hooks';
 
 export class MyDurableObject extends withAdminHooks() {
   async fetch(request: Request): Promise<Response> {
@@ -20,14 +23,6 @@ export class MyDurableObject extends withAdminHooks() {
     if (adminResponse) return adminResponse;
 
     // Your custom logic here
-    const url = new URL(request.url);
-    
-    if (url.pathname === '/increment') {
-      const count = (await this.state.storage.get<number>('count')) ?? 0;
-      await this.state.storage.put('count', count + 1);
-      return Response.json({ count: count + 1 });
-    }
-
     return new Response('Hello from my Durable Object!');
   }
 }
@@ -40,7 +35,7 @@ export class SecureDO extends withAdminHooks({
   // Change the base path for admin endpoints (default: '/admin')
   basePath: '/admin',
   
-  // Require authentication for admin endpoints
+  // Require authentication for admin endpoints (recommended for production)
   requireAuth: true,
   adminKey: 'your-secret-key',
 }) {
@@ -50,41 +45,43 @@ export class SecureDO extends withAdminHooks({
 
 ## Admin Endpoints
 
-Once you extend `withAdminHooks()`, your Durable Object automatically exposes these endpoints:
+Once you extend `withAdminHooks()`, your Durable Object exposes these endpoints:
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/admin/list` | GET | List all storage keys (KV) or tables (SQLite) |
-| `/admin/get?key=X` | GET | Get value for a specific key |
-| `/admin/put` | POST | Set a key-value pair (`{ key, value }`) |
+| `/admin/list` | GET | List storage keys (KV) or tables (SQLite) |
+| `/admin/get?key=X` | GET | Get value for a key |
+| `/admin/put` | POST | Set key-value pair (`{ key, value }`) |
 | `/admin/delete` | POST | Delete a key (`{ key }`) |
-| `/admin/sql` | POST | Execute SQL query (`{ query }`) - SQLite only |
-| `/admin/alarm` | GET | Get current alarm timestamp |
+| `/admin/sql` | POST | Execute SQL (`{ query }`) - SQLite only |
+| `/admin/alarm` | GET | Get current alarm |
 | `/admin/alarm` | PUT | Set alarm (`{ timestamp }`) |
 | `/admin/alarm` | DELETE | Delete alarm |
-| `/admin/export` | GET | Export all storage data as JSON |
+| `/admin/export` | GET | Export all storage as JSON |
 | `/admin/import` | POST | Import data (`{ data: {...} }`) |
 
 ## DO Manager Setup
 
-1. Deploy your Worker with the admin hooks
-2. In DO Manager, add your namespace
-3. Set the **Admin Hook Endpoint URL** to your Worker's URL (e.g., `https://my-worker.my-subdomain.workers.dev`)
-4. Enable the admin hook toggle
-5. You can now view/edit storage, set alarms, and backup your DOs!
+1. Install this package and deploy your Worker
+2. In [DO Manager](https://do.adamic.tech), add your namespace
+3. Enter your **Admin Hook Endpoint URL** (e.g., `https://my-worker.workers.dev`)
+4. Admin hooks are automatically enabled when you save
+5. View/edit storage, set alarms, and backup your DOs!
 
-## With Authentication
+## Security
 
-If you enable `requireAuth`, DO Manager will need to send the admin key in requests. Set this in your namespace settings.
+For production, enable authentication:
 
 ```typescript
 export class SecureDO extends withAdminHooks({
   requireAuth: true,
-  adminKey: process.env.ADMIN_KEY ?? 'fallback-key',
+  adminKey: process.env.ADMIN_KEY,
 }) {
   // ...
 }
 ```
+
+Features timing-safe key comparison to prevent timing attacks.
 
 ## TypeScript Support
 
@@ -96,10 +93,15 @@ import {
   AdminHooksOptions,
   AdminListResponse,
   AdminExportResponse 
-} from '@do-manager/admin-hooks';
+} from 'do-manager-admin-hooks';
 ```
+
+## Links
+
+- [DO Manager](https://do.adamic.tech) - Web UI for managing Durable Objects
+- [GitHub](https://github.com/neverinfamous/do-manager-admin-hooks) - Source code
+- [NPM](https://www.npmjs.com/package/do-manager-admin-hooks) - Package
 
 ## License
 
 MIT
-
