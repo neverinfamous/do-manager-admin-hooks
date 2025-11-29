@@ -1,6 +1,6 @@
 # @do-manager/admin-hooks
 
-Admin hooks for Cloudflare Durable Objects that enable integration with [DO Manager](https://do.adamic.tech).
+Admin hooks for Cloudflare Durable Objects that enable integration with [Durable Object Manager](https://do.adamic.tech).
 
 ## Installation
 
