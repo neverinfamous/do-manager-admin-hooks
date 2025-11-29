@@ -1,0 +1,50 @@
+{
+  "name": "do-manager-admin-hooks",
+  "version": "1.0.0",
+  "description": "Admin hooks for Cloudflare Durable Objects - enables DO Manager integration",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts --format cjs,esm --dts --clean",
+    "prepublishOnly": "npm run build",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "cloudflare",
+    "durable-objects",
+    "workers",
+    "admin",
+    "management",
+    "do-manager"
+  ],
+  "author": "adamic.tech",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/neverinfamous/do-manager-admin-hooks.git"
+  },
+  "homepage": "https://do.adamic.tech",
+  "bugs": {
+    "url": "https://github.com/neverinfamous/do-manager-admin-hooks/issues"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20241127.0",
+    "tsup": "^8.3.5",
+    "typescript": "^5.7.2"
+  },
+  "peerDependencies": {
+    "@cloudflare/workers-types": ">=4.0.0"
+  }
+}
