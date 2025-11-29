@@ -64,6 +64,19 @@ interface DurableObjectId {
 }
 
 /**
+ * Timing-safe string comparison to prevent timing attacks
+ */
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  
+  let result = 0;
+  for (let i = 0; i < a.length; i++) {
+    result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return result === 0;
+}
+
+/**
  * Admin hook request body types
  */
 interface AdminPutBody {
@@ -199,10 +212,14 @@ export function withAdminHooks(options: AdminHooksOptions = {}) {
         return null;
       }
       
-      // Check authentication if required
+      // Check authentication if required (timing-safe comparison)
       if (options.requireAuth) {
-        const providedKey = request.headers.get('X-Admin-Key');
-        if (providedKey !== options.adminKey) {
+        const providedKey = request.headers.get('X-Admin-Key') ?? '';
+        const expectedKey = options.adminKey ?? '';
+        
+        // Timing-safe comparison to prevent timing attacks
+        if (providedKey.length !== expectedKey.length || 
+            !timingSafeEqual(providedKey, expectedKey)) {
           return new Response(JSON.stringify({ error: 'Unauthorized' }), {
             status: 401,
             headers: { 'Content-Type': 'application/json' },

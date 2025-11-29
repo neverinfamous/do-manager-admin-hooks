@@ -23,6 +23,14 @@ __export(index_exports, {
   withAdminHooks: () => withAdminHooks
 });
 module.exports = __toCommonJS(index_exports);
+function timingSafeEqual(a, b) {
+  if (a.length !== b.length) return false;
+  let result = 0;
+  for (let i = 0; i < a.length; i++) {
+    result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return result === 0;
+}
 function withAdminHooks(options = {}) {
   const basePath = options.basePath ?? "/admin";
   return class AdminHooksDurableObject {
@@ -43,8 +51,9 @@ function withAdminHooks(options = {}) {
         return null;
       }
       if (options.requireAuth) {
-        const providedKey = request.headers.get("X-Admin-Key");
-        if (providedKey !== options.adminKey) {
+        const providedKey = request.headers.get("X-Admin-Key") ?? "";
+        const expectedKey = options.adminKey ?? "";
+        if (providedKey.length !== expectedKey.length || !timingSafeEqual(providedKey, expectedKey)) {
           return new Response(JSON.stringify({ error: "Unauthorized" }), {
             status: 401,
             headers: { "Content-Type": "application/json" }
