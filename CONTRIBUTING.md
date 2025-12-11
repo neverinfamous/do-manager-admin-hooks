@@ -41,5 +41,5 @@ Test your changes by:
 
 ## Questions?
 
-Open an issue or start a discussion on GitHub.
+Open an issue on GitHub.
 
