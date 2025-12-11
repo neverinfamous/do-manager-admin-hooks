@@ -98,8 +98,8 @@ import {
 
 ## Links
 
-- [DO Manager](https://do.adamic.tech) - Web UI for managing Durable Objects
-- [GitHub](https://github.com/neverinfamous/do-manager-admin-hooks) - Source code
+- [DO Manager Demo Site](https://do.adamic.tech) - Web UI for managing Durable Objects
+- [DO Manager GitHub](https://github.com/neverinfamous?tab=repositories) - Do Manager GitHub repository
 - [NPM](https://www.npmjs.com/package/do-manager-admin-hooks) - Package
 
 ## License
