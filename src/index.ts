@@ -101,6 +101,12 @@ interface AdminImportBody {
 }
 
 /**
+ * Special storage key used to mark an instance as frozen (read-only)
+ * When set to true, all put/delete operations are blocked
+ */
+const FROZEN_STORAGE_KEY = '__do_manager_frozen';
+
+/**
  * Admin hook response types
  */
 interface AdminListResponse {
@@ -126,6 +132,11 @@ interface AdminSqlResponse {
   result: unknown[];
   rowCount: number;
   columns?: string[];
+}
+
+interface AdminFreezeResponse {
+  frozen: boolean;
+  frozenAt?: string;
 }
 
 /**
@@ -261,6 +272,21 @@ export function withAdminHooks(options: AdminHooksOptions = {}) {
           return Response.json({ success: true });
         }
         
+        // Freeze instance (set read-only)
+        if (adminPath === '/freeze' && request.method === 'PUT') {
+          return Response.json(await this.adminFreeze());
+        }
+        
+        // Unfreeze instance (remove read-only)
+        if (adminPath === '/freeze' && request.method === 'DELETE') {
+          return Response.json(await this.adminUnfreeze());
+        }
+        
+        // Get freeze status
+        if (adminPath === '/freeze' && request.method === 'GET') {
+          return Response.json(await this.adminGetFreezeStatus());
+        }
+        
         // Delete value
         if (adminPath === '/delete' && request.method === 'POST') {
           const body = await request.json() as AdminDeleteBody;
@@ -369,16 +395,30 @@ export function withAdminHooks(options: AdminHooksOptions = {}) {
     }
     
     /**
-     * Put a storage value
+     * Put a storage value (blocked if frozen, unless it's the frozen key itself)
      */
     async adminPut(key: string, value: unknown): Promise<void> {
+      // Allow setting/unsetting the frozen key itself
+      if (key !== FROZEN_STORAGE_KEY) {
+        const isFrozen = await this.state.storage.get<boolean>(FROZEN_STORAGE_KEY);
+        if (isFrozen) {
+          throw new Error('Instance is frozen. Unfreeze before making changes.');
+        }
+      }
       await this.state.storage.put(key, value);
     }
     
     /**
-     * Delete a storage value
+     * Delete a storage value (blocked if frozen, unless it's the frozen key itself)
      */
     async adminDelete(key: string): Promise<void> {
+      // Allow deleting the frozen key itself (for unfreezing)
+      if (key !== FROZEN_STORAGE_KEY) {
+        const isFrozen = await this.state.storage.get<boolean>(FROZEN_STORAGE_KEY);
+        if (isFrozen) {
+          throw new Error('Instance is frozen. Unfreeze before making changes.');
+        }
+      }
       await this.state.storage.delete(key);
     }
     
@@ -441,10 +481,42 @@ export function withAdminHooks(options: AdminHooksOptions = {}) {
     }
     
     /**
-     * Import data (merge with existing)
+     * Import data (merge with existing) - blocked if frozen
      */
     async adminImport(data: Record<string, unknown>): Promise<void> {
+      const isFrozen = await this.state.storage.get<boolean>(FROZEN_STORAGE_KEY);
+      if (isFrozen) {
+        throw new Error('Instance is frozen. Unfreeze before importing data.');
+      }
       await this.state.storage.put(data);
+    }
+    
+    /**
+     * Freeze the instance (set read-only mode)
+     */
+    async adminFreeze(): Promise<AdminFreezeResponse> {
+      const frozenAt = new Date().toISOString();
+      await this.state.storage.put(FROZEN_STORAGE_KEY, true);
+      await this.state.storage.put(`${FROZEN_STORAGE_KEY}_at`, frozenAt);
+      return { frozen: true, frozenAt };
+    }
+    
+    /**
+     * Unfreeze the instance (remove read-only mode)
+     */
+    async adminUnfreeze(): Promise<AdminFreezeResponse> {
+      await this.state.storage.delete(FROZEN_STORAGE_KEY);
+      await this.state.storage.delete(`${FROZEN_STORAGE_KEY}_at`);
+      return { frozen: false };
+    }
+    
+    /**
+     * Get freeze status
+     */
+    async adminGetFreezeStatus(): Promise<AdminFreezeResponse> {
+      const isFrozen = await this.state.storage.get<boolean>(FROZEN_STORAGE_KEY);
+      const frozenAt = await this.state.storage.get<string>(`${FROZEN_STORAGE_KEY}_at`);
+      return { frozen: !!isFrozen, frozenAt: frozenAt ?? undefined };
     }
     
     /**
@@ -482,5 +554,6 @@ export type {
   AdminExportResponse,
   AdminAlarmResponse,
   AdminSqlResponse,
+  AdminFreezeResponse,
 };
 

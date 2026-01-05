@@ -59,6 +59,15 @@ Once you extend `withAdminHooks()`, your Durable Object exposes these endpoints:
 | `/admin/alarm` | DELETE | Delete alarm |
 | `/admin/export` | GET | Export all storage as JSON |
 | `/admin/import` | POST | Import data (`{ data: {...} }`) |
+| `/admin/:name/freeze` | PUT | Freeze instance (block writes) |
+| `/admin/:name/freeze` | DELETE | Unfreeze instance (allow writes) |
+| `/admin/:name/freeze` | GET | Get freeze status |
+
+### Freeze Operations
+
+Freeze functionality is used for instance migration cutover modes. When an instance is frozen:
+- `PUT`, `DELETE`, and `IMPORT` operations return `423 Locked`
+- Read operations (`GET`, `LIST`, `EXPORT`) continue to work
 
 ## DO Manager Setup
 

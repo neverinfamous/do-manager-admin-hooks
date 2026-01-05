@@ -78,6 +78,10 @@ interface AdminSqlResponse {
     rowCount: number;
     columns?: string[];
 }
+interface AdminFreezeResponse {
+    frozen: boolean;
+    frozenAt?: string;
+}
 /**
  * Configuration options for admin hooks
  */
@@ -151,11 +155,11 @@ declare function withAdminHooks(options?: AdminHooksOptions): {
          */
         adminGet(key: string): Promise<AdminGetResponse>;
         /**
-         * Put a storage value
+         * Put a storage value (blocked if frozen, unless it's the frozen key itself)
          */
         adminPut(key: string, value: unknown): Promise<void>;
         /**
-         * Delete a storage value
+         * Delete a storage value (blocked if frozen, unless it's the frozen key itself)
          */
         adminDelete(key: string): Promise<void>;
         /**
@@ -179,9 +183,21 @@ declare function withAdminHooks(options?: AdminHooksOptions): {
          */
         adminExport(): Promise<AdminExportResponse>;
         /**
-         * Import data (merge with existing)
+         * Import data (merge with existing) - blocked if frozen
          */
         adminImport(data: Record<string, unknown>): Promise<void>;
+        /**
+         * Freeze the instance (set read-only mode)
+         */
+        adminFreeze(): Promise<AdminFreezeResponse>;
+        /**
+         * Unfreeze the instance (remove read-only mode)
+         */
+        adminUnfreeze(): Promise<AdminFreezeResponse>;
+        /**
+         * Get freeze status
+         */
+        adminGetFreezeStatus(): Promise<AdminFreezeResponse>;
         /**
          * Default fetch handler - override this in your subclass
          */
@@ -197,4 +213,4 @@ declare function withAdminHooks(options?: AdminHooksOptions): {
  */
 type AdminHooksClass = ReturnType<typeof withAdminHooks>;
 
-export { type AdminAlarmResponse, type AdminExportResponse, type AdminGetResponse, type AdminHooksClass, type AdminHooksOptions, type AdminListResponse, type AdminSqlResponse, withAdminHooks };
+export { type AdminAlarmResponse, type AdminExportResponse, type AdminFreezeResponse, type AdminGetResponse, type AdminHooksClass, type AdminHooksOptions, type AdminListResponse, type AdminSqlResponse, withAdminHooks };

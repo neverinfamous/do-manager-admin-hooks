@@ -7,6 +7,7 @@ function timingSafeEqual(a, b) {
   }
   return result === 0;
 }
+var FROZEN_STORAGE_KEY = "__do_manager_frozen";
 function withAdminHooks(options = {}) {
   const basePath = options.basePath ?? "/admin";
   return class AdminHooksDurableObject {
@@ -61,6 +62,15 @@ function withAdminHooks(options = {}) {
           }
           await this.adminPut(body.key, body.value);
           return Response.json({ success: true });
+        }
+        if (adminPath === "/freeze" && request.method === "PUT") {
+          return Response.json(await this.adminFreeze());
+        }
+        if (adminPath === "/freeze" && request.method === "DELETE") {
+          return Response.json(await this.adminUnfreeze());
+        }
+        if (adminPath === "/freeze" && request.method === "GET") {
+          return Response.json(await this.adminGetFreezeStatus());
         }
         if (adminPath === "/delete" && request.method === "POST") {
           const body = await request.json();
@@ -148,15 +158,27 @@ function withAdminHooks(options = {}) {
       return { value };
     }
     /**
-     * Put a storage value
+     * Put a storage value (blocked if frozen, unless it's the frozen key itself)
      */
     async adminPut(key, value) {
+      if (key !== FROZEN_STORAGE_KEY) {
+        const isFrozen = await this.state.storage.get(FROZEN_STORAGE_KEY);
+        if (isFrozen) {
+          throw new Error("Instance is frozen. Unfreeze before making changes.");
+        }
+      }
       await this.state.storage.put(key, value);
     }
     /**
-     * Delete a storage value
+     * Delete a storage value (blocked if frozen, unless it's the frozen key itself)
      */
     async adminDelete(key) {
+      if (key !== FROZEN_STORAGE_KEY) {
+        const isFrozen = await this.state.storage.get(FROZEN_STORAGE_KEY);
+        if (isFrozen) {
+          throw new Error("Instance is frozen. Unfreeze before making changes.");
+        }
+      }
       await this.state.storage.delete(key);
     }
     /**
@@ -209,10 +231,39 @@ function withAdminHooks(options = {}) {
       };
     }
     /**
-     * Import data (merge with existing)
+     * Import data (merge with existing) - blocked if frozen
      */
     async adminImport(data) {
+      const isFrozen = await this.state.storage.get(FROZEN_STORAGE_KEY);
+      if (isFrozen) {
+        throw new Error("Instance is frozen. Unfreeze before importing data.");
+      }
       await this.state.storage.put(data);
+    }
+    /**
+     * Freeze the instance (set read-only mode)
+     */
+    async adminFreeze() {
+      const frozenAt = (/* @__PURE__ */ new Date()).toISOString();
+      await this.state.storage.put(FROZEN_STORAGE_KEY, true);
+      await this.state.storage.put(`${FROZEN_STORAGE_KEY}_at`, frozenAt);
+      return { frozen: true, frozenAt };
+    }
+    /**
+     * Unfreeze the instance (remove read-only mode)
+     */
+    async adminUnfreeze() {
+      await this.state.storage.delete(FROZEN_STORAGE_KEY);
+      await this.state.storage.delete(`${FROZEN_STORAGE_KEY}_at`);
+      return { frozen: false };
+    }
+    /**
+     * Get freeze status
+     */
+    async adminGetFreezeStatus() {
+      const isFrozen = await this.state.storage.get(FROZEN_STORAGE_KEY);
+      const frozenAt = await this.state.storage.get(`${FROZEN_STORAGE_KEY}_at`);
+      return { frozen: !!isFrozen, frozenAt: frozenAt ?? void 0 };
     }
     /**
      * Default fetch handler - override this in your subclass
