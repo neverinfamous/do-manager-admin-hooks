@@ -1,0 +1,53 @@
+# Changelog
+
+All notable changes to `do-manager-admin-hooks`.
+
+---
+
+## [1.1.0] - 2026-01-05
+
+### Added
+- **Freeze/Unfreeze endpoints** for instance migration support
+  - `PUT /admin/:name/freeze` - Freeze instance (block writes)
+  - `DELETE /admin/:name/freeze` - Unfreeze instance (allow writes)
+  - `GET /admin/:name/freeze` - Get current freeze status
+- When frozen, `PUT`, `DELETE`, and `IMPORT` operations return `423 Locked`
+- Required for DO Manager v1.2.0 "Copy + Freeze Source" migration mode
+
+---
+
+## [1.0.1] - 2025-12-01
+
+### Fixed
+- Minor documentation updates
+
+---
+
+## [1.0.0] - 2025-11-29
+
+### Added
+- Initial release
+- **Storage Operations**
+  - `GET /admin/list` - List storage keys (KV) or tables (SQLite)
+  - `GET /admin/get?key=X` - Get value for a key
+  - `POST /admin/put` - Set key-value pair
+  - `POST /admin/delete` - Delete a key
+- **SQL Operations** (SQLite only)
+  - `POST /admin/sql` - Execute SQL query
+- **Alarm Operations**
+  - `GET /admin/alarm` - Get current alarm
+  - `PUT /admin/alarm` - Set alarm
+  - `DELETE /admin/alarm` - Delete alarm
+- **Bulk Operations**
+  - `GET /admin/export` - Export all storage as JSON
+  - `POST /admin/import` - Import data from JSON
+- Configuration options: `basePath`, `requireAuth`, `adminKey`
+- TypeScript support with exported types
+
+---
+
+## Links
+
+- [NPM Package](https://www.npmjs.com/package/do-manager-admin-hooks)
+- [GitHub Repository](https://github.com/neverinfamous/do-manager-admin-hooks)
+- [DO Manager](https://do.adamic.tech)
