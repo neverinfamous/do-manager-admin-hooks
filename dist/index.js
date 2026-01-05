@@ -62,11 +62,13 @@ function withAdminHooks(options = {}) {
         }
       }
       const adminPath = path.slice(basePath.length);
+      const pathParts = adminPath.split("/").filter(Boolean);
+      const operation = pathParts.length > 0 ? "/" + pathParts[pathParts.length - 1] : "";
       try {
-        if (adminPath === "/list" && request.method === "GET") {
+        if (operation === "/list" && request.method === "GET") {
           return Response.json(await this.adminList());
         }
-        if (adminPath === "/get" && request.method === "GET") {
+        if (operation === "/get" && request.method === "GET") {
           const key = url.searchParams.get("key");
           if (!key) {
             return new Response(JSON.stringify({ error: "Missing key parameter" }), {
@@ -76,7 +78,7 @@ function withAdminHooks(options = {}) {
           }
           return Response.json(await this.adminGet(key));
         }
-        if (adminPath === "/put" && request.method === "POST") {
+        if (operation === "/put" && request.method === "POST") {
           const body = await request.json();
           if (!body.key) {
             return new Response(JSON.stringify({ error: "Missing key in body" }), {
@@ -87,16 +89,16 @@ function withAdminHooks(options = {}) {
           await this.adminPut(body.key, body.value);
           return Response.json({ success: true });
         }
-        if (adminPath === "/freeze" && request.method === "PUT") {
+        if (operation === "/freeze" && request.method === "PUT") {
           return Response.json(await this.adminFreeze());
         }
-        if (adminPath === "/freeze" && request.method === "DELETE") {
+        if (operation === "/freeze" && request.method === "DELETE") {
           return Response.json(await this.adminUnfreeze());
         }
-        if (adminPath === "/freeze" && request.method === "GET") {
+        if (operation === "/freeze" && request.method === "GET") {
           return Response.json(await this.adminGetFreezeStatus());
         }
-        if (adminPath === "/delete" && request.method === "POST") {
+        if (operation === "/delete" && request.method === "POST") {
           const body = await request.json();
           if (!body.key) {
             return new Response(JSON.stringify({ error: "Missing key in body" }), {
@@ -107,7 +109,7 @@ function withAdminHooks(options = {}) {
           await this.adminDelete(body.key);
           return Response.json({ success: true });
         }
-        if (adminPath === "/sql" && request.method === "POST") {
+        if (operation === "/sql" && request.method === "POST") {
           const body = await request.json();
           if (!body.query) {
             return new Response(JSON.stringify({ error: "Missing query in body" }), {
@@ -117,10 +119,10 @@ function withAdminHooks(options = {}) {
           }
           return Response.json(await this.adminSql(body.query));
         }
-        if (adminPath === "/alarm" && request.method === "GET") {
+        if (operation === "/alarm" && request.method === "GET") {
           return Response.json(await this.adminGetAlarm());
         }
-        if (adminPath === "/alarm" && request.method === "PUT") {
+        if (operation === "/alarm" && request.method === "PUT") {
           const body = await request.json();
           if (typeof body.timestamp !== "number") {
             return new Response(JSON.stringify({ error: "Missing or invalid timestamp" }), {
@@ -131,14 +133,14 @@ function withAdminHooks(options = {}) {
           await this.adminSetAlarm(body.timestamp);
           return Response.json({ success: true, alarm: body.timestamp });
         }
-        if (adminPath === "/alarm" && request.method === "DELETE") {
+        if (operation === "/alarm" && request.method === "DELETE") {
           await this.adminDeleteAlarm();
           return Response.json({ success: true });
         }
-        if (adminPath === "/export" && request.method === "GET") {
+        if (operation === "/export" && request.method === "GET") {
           return Response.json(await this.adminExport());
         }
-        if (adminPath === "/import" && request.method === "POST") {
+        if (operation === "/import" && request.method === "POST") {
           const body = await request.json();
           if (!body.data || typeof body.data !== "object") {
             return new Response(JSON.stringify({ error: "Missing or invalid data object" }), {

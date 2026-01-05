@@ -68,7 +68,7 @@ interface DurableObjectId {
  */
 function timingSafeEqual(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
-  
+
   let result = 0;
   for (let i = 0; i < a.length; i++) {
     result |= a.charCodeAt(i) ^ b.charCodeAt(i);
@@ -147,18 +147,18 @@ export interface AdminHooksOptions {
    * Base path for admin endpoints. Default: '/admin'
    */
   basePath?: string;
-  
+
   /**
    * Whether to require authentication header. Default: false
    * If true, requests must include X-Admin-Key header matching the provided key
    */
   requireAuth?: boolean;
-  
+
   /**
    * The admin key to validate against when requireAuth is true
    */
   adminKey?: string;
-  
+
   /**
    * Custom handler for requests that don't match admin routes
    * If not provided, returns 404 for unmatched admin routes
@@ -200,16 +200,16 @@ export interface AdminHooksOptions {
  */
 export function withAdminHooks(options: AdminHooksOptions = {}) {
   const basePath = options.basePath ?? '/admin';
-  
+
   return class AdminHooksDurableObject {
     state: DurableObjectState;
     env: unknown;
-    
+
     constructor(state: DurableObjectState, env: unknown) {
       this.state = state;
       this.env = env;
     }
-    
+
     /**
      * Handle admin requests. Call this at the start of your fetch handler.
      * Returns a Response if the request was an admin request, or null if not.
@@ -217,38 +217,42 @@ export function withAdminHooks(options: AdminHooksOptions = {}) {
     async handleAdminRequest(request: Request): Promise<Response | null> {
       const url = new URL(request.url);
       const path = url.pathname;
-      
+
       // Check if this is an admin request
       if (!path.startsWith(basePath)) {
         return null;
       }
-      
+
       // Check authentication if required (timing-safe comparison)
       if (options.requireAuth) {
         const providedKey = request.headers.get('X-Admin-Key') ?? '';
         const expectedKey = options.adminKey ?? '';
-        
+
         // Timing-safe comparison to prevent timing attacks
-        if (providedKey.length !== expectedKey.length || 
-            !timingSafeEqual(providedKey, expectedKey)) {
+        if (providedKey.length !== expectedKey.length ||
+          !timingSafeEqual(providedKey, expectedKey)) {
           return new Response(JSON.stringify({ error: 'Unauthorized' }), {
             status: 401,
             headers: { 'Content-Type': 'application/json' },
           });
         }
       }
-      
+
       // Route admin requests
+      // Support both /admin/list and /admin/:instanceName/list formats
       const adminPath = path.slice(basePath.length);
-      
+      // Extract the operation (last path segment) - handles /list, /MyInstance/list, etc.
+      const pathParts = adminPath.split('/').filter(Boolean);
+      const operation = pathParts.length > 0 ? '/' + pathParts[pathParts.length - 1] : '';
+
       try {
         // List keys/tables
-        if (adminPath === '/list' && request.method === 'GET') {
+        if (operation === '/list' && request.method === 'GET') {
           return Response.json(await this.adminList());
         }
-        
+
         // Get single value
-        if (adminPath === '/get' && request.method === 'GET') {
+        if (operation === '/get' && request.method === 'GET') {
           const key = url.searchParams.get('key');
           if (!key) {
             return new Response(JSON.stringify({ error: 'Missing key parameter' }), {
@@ -258,9 +262,9 @@ export function withAdminHooks(options: AdminHooksOptions = {}) {
           }
           return Response.json(await this.adminGet(key));
         }
-        
+
         // Put value
-        if (adminPath === '/put' && request.method === 'POST') {
+        if (operation === '/put' && request.method === 'POST') {
           const body = await request.json() as AdminPutBody;
           if (!body.key) {
             return new Response(JSON.stringify({ error: 'Missing key in body' }), {
@@ -271,24 +275,24 @@ export function withAdminHooks(options: AdminHooksOptions = {}) {
           await this.adminPut(body.key, body.value);
           return Response.json({ success: true });
         }
-        
+
         // Freeze instance (set read-only)
-        if (adminPath === '/freeze' && request.method === 'PUT') {
+        if (operation === '/freeze' && request.method === 'PUT') {
           return Response.json(await this.adminFreeze());
         }
-        
+
         // Unfreeze instance (remove read-only)
-        if (adminPath === '/freeze' && request.method === 'DELETE') {
+        if (operation === '/freeze' && request.method === 'DELETE') {
           return Response.json(await this.adminUnfreeze());
         }
-        
+
         // Get freeze status
-        if (adminPath === '/freeze' && request.method === 'GET') {
+        if (operation === '/freeze' && request.method === 'GET') {
           return Response.json(await this.adminGetFreezeStatus());
         }
-        
+
         // Delete value
-        if (adminPath === '/delete' && request.method === 'POST') {
+        if (operation === '/delete' && request.method === 'POST') {
           const body = await request.json() as AdminDeleteBody;
           if (!body.key) {
             return new Response(JSON.stringify({ error: 'Missing key in body' }), {
@@ -299,9 +303,9 @@ export function withAdminHooks(options: AdminHooksOptions = {}) {
           await this.adminDelete(body.key);
           return Response.json({ success: true });
         }
-        
+
         // Execute SQL (SQLite backend only)
-        if (adminPath === '/sql' && request.method === 'POST') {
+        if (operation === '/sql' && request.method === 'POST') {
           const body = await request.json() as AdminSqlBody;
           if (!body.query) {
             return new Response(JSON.stringify({ error: 'Missing query in body' }), {
@@ -311,14 +315,14 @@ export function withAdminHooks(options: AdminHooksOptions = {}) {
           }
           return Response.json(await this.adminSql(body.query));
         }
-        
+
         // Get alarm
-        if (adminPath === '/alarm' && request.method === 'GET') {
+        if (operation === '/alarm' && request.method === 'GET') {
           return Response.json(await this.adminGetAlarm());
         }
-        
+
         // Set alarm
-        if (adminPath === '/alarm' && request.method === 'PUT') {
+        if (operation === '/alarm' && request.method === 'PUT') {
           const body = await request.json() as AdminAlarmBody;
           if (typeof body.timestamp !== 'number') {
             return new Response(JSON.stringify({ error: 'Missing or invalid timestamp' }), {
@@ -329,20 +333,20 @@ export function withAdminHooks(options: AdminHooksOptions = {}) {
           await this.adminSetAlarm(body.timestamp);
           return Response.json({ success: true, alarm: body.timestamp });
         }
-        
+
         // Delete alarm
-        if (adminPath === '/alarm' && request.method === 'DELETE') {
+        if (operation === '/alarm' && request.method === 'DELETE') {
           await this.adminDeleteAlarm();
           return Response.json({ success: true });
         }
-        
+
         // Export all data
-        if (adminPath === '/export' && request.method === 'GET') {
+        if (operation === '/export' && request.method === 'GET') {
           return Response.json(await this.adminExport());
         }
-        
+
         // Import data
-        if (adminPath === '/import' && request.method === 'POST') {
+        if (operation === '/import' && request.method === 'POST') {
           const body = await request.json() as AdminImportBody;
           if (!body.data || typeof body.data !== 'object') {
             return new Response(JSON.stringify({ error: 'Missing or invalid data object' }), {
@@ -353,13 +357,13 @@ export function withAdminHooks(options: AdminHooksOptions = {}) {
           await this.adminImport(body.data);
           return Response.json({ success: true, imported: Object.keys(body.data).length });
         }
-        
+
         // Unknown admin route
         return new Response(JSON.stringify({ error: 'Unknown admin endpoint' }), {
           status: 404,
           headers: { 'Content-Type': 'application/json' },
         });
-        
+
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error';
         return new Response(JSON.stringify({ error: message }), {
@@ -368,7 +372,7 @@ export function withAdminHooks(options: AdminHooksOptions = {}) {
         });
       }
     }
-    
+
     /**
      * List all storage keys or SQL tables
      */
@@ -380,12 +384,12 @@ export function withAdminHooks(options: AdminHooksOptions = {}) {
         );
         return { tables: result.toArray().map(row => row.name) };
       }
-      
+
       // KV backend
       const entries = await this.state.storage.list();
       return { keys: [...entries.keys()] };
     }
-    
+
     /**
      * Get a single storage value
      */
@@ -393,7 +397,7 @@ export function withAdminHooks(options: AdminHooksOptions = {}) {
       const value = await this.state.storage.get(key);
       return { value };
     }
-    
+
     /**
      * Put a storage value (blocked if frozen, unless it's the frozen key itself)
      */
@@ -407,7 +411,7 @@ export function withAdminHooks(options: AdminHooksOptions = {}) {
       }
       await this.state.storage.put(key, value);
     }
-    
+
     /**
      * Delete a storage value (blocked if frozen, unless it's the frozen key itself)
      */
@@ -421,7 +425,7 @@ export function withAdminHooks(options: AdminHooksOptions = {}) {
       }
       await this.state.storage.delete(key);
     }
-    
+
     /**
      * Execute SQL query (SQLite backend only)
      */
@@ -429,17 +433,17 @@ export function withAdminHooks(options: AdminHooksOptions = {}) {
       if (!this.state.storage.sql) {
         throw new Error('SQL not available - this DO uses KV storage backend');
       }
-      
+
       const result = this.state.storage.sql.exec(query);
       const rows = result.toArray();
-      
+
       return {
         result: rows,
         rowCount: rows.length,
         columns: result.columnNames,
       };
     }
-    
+
     /**
      * Get current alarm timestamp
      */
@@ -447,39 +451,39 @@ export function withAdminHooks(options: AdminHooksOptions = {}) {
       const alarm = await this.state.storage.getAlarm();
       return { alarm };
     }
-    
+
     /**
      * Set alarm
      */
     async adminSetAlarm(timestamp: number): Promise<void> {
       await this.state.storage.setAlarm(timestamp);
     }
-    
+
     /**
      * Delete alarm
      */
     async adminDeleteAlarm(): Promise<void> {
       await this.state.storage.deleteAlarm();
     }
-    
+
     /**
      * Export all storage data
      */
     async adminExport(): Promise<AdminExportResponse> {
       const entries = await this.state.storage.list();
       const data: Record<string, unknown> = {};
-      
+
       for (const [key, value] of entries) {
         data[key] = value;
       }
-      
+
       return {
         data,
         exportedAt: new Date().toISOString(),
         keyCount: entries.size,
       };
     }
-    
+
     /**
      * Import data (merge with existing) - blocked if frozen
      */
@@ -490,7 +494,7 @@ export function withAdminHooks(options: AdminHooksOptions = {}) {
       }
       await this.state.storage.put(data);
     }
-    
+
     /**
      * Freeze the instance (set read-only mode)
      */
@@ -500,7 +504,7 @@ export function withAdminHooks(options: AdminHooksOptions = {}) {
       await this.state.storage.put(`${FROZEN_STORAGE_KEY}_at`, frozenAt);
       return { frozen: true, frozenAt };
     }
-    
+
     /**
      * Unfreeze the instance (remove read-only mode)
      */
@@ -509,7 +513,7 @@ export function withAdminHooks(options: AdminHooksOptions = {}) {
       await this.state.storage.delete(`${FROZEN_STORAGE_KEY}_at`);
       return { frozen: false };
     }
-    
+
     /**
      * Get freeze status
      */
@@ -518,7 +522,7 @@ export function withAdminHooks(options: AdminHooksOptions = {}) {
       const frozenAt = await this.state.storage.get<string>(`${FROZEN_STORAGE_KEY}_at`);
       return { frozen: !!isFrozen, frozenAt: frozenAt ?? undefined };
     }
-    
+
     /**
      * Default fetch handler - override this in your subclass
      */
@@ -526,13 +530,13 @@ export function withAdminHooks(options: AdminHooksOptions = {}) {
       // Handle admin requests
       const adminResponse = await this.handleAdminRequest(request);
       if (adminResponse) return adminResponse;
-      
+
       // Default response - override this in your subclass
       return new Response('Durable Object with admin hooks enabled. Override fetch() to add your logic.', {
         headers: { 'Content-Type': 'text/plain' },
       });
     }
-    
+
     /**
      * Optional alarm handler - override this in your subclass if needed
      */

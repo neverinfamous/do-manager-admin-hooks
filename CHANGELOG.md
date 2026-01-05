@@ -4,6 +4,15 @@ All notable changes to `do-manager-admin-hooks`.
 
 ---
 
+## [1.1.1] - 2026-01-05
+
+### Fixed
+- **Routing fix** for instance name prefixes in admin paths
+  - Now supports both `/admin/export` and `/admin/:instanceName/export` formats
+  - Fixes instance migration not copying storage keys
+
+---
+
 ## [1.1.0] - 2026-01-05
 
 ### Added
