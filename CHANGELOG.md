@@ -4,6 +4,14 @@ All notable changes to `do-manager-admin-hooks`.
 
 ---
 
+## [Unreleased]
+
+### Changed
+
+- **Dependencies**: Updated `@cloudflare/workers-types` from 4.20251229.0 to 4.20260124.0
+
+---
+
 ## [1.1.1] - 2026-01-05
 
 ### Fixed

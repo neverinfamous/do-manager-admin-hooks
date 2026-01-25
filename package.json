@@ -40,7 +40,7 @@
     "url": "https://github.com/neverinfamous/do-manager-admin-hooks/issues"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20241127.0",
+    "@cloudflare/workers-types": "^4.20260124.0",
     "tsup": "^8.3.5",
     "typescript": "^5.7.2"
   },
