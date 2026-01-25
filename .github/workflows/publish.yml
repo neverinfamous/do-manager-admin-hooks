@@ -10,21 +10,21 @@ jobs:
     environment: npm
     permissions:
       contents: read
-      id-token: write  # Required for OIDC / Trusted Publisher
+      id-token: write # Required for OIDC / Trusted Publisher
     steps:
       - uses: actions/checkout@v6
-      
+
       - uses: actions/setup-node@v6
         with:
-          node-version: '20'
-          registry-url: 'https://registry.npmjs.org'
-      
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+
       - name: Install dependencies
         run: npm ci
-      
+
       - name: Build
         run: npm run build
-      
+
       - name: Publish to NPM with provenance
         run: npm publish --provenance --access public
         env:

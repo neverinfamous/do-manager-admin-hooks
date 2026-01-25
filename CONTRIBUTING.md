@@ -35,6 +35,7 @@ npm run typecheck
 ## Testing Changes
 
 Test your changes by:
+
 1. Building the package: `npm run build`
 2. Linking locally: `npm link`
 3. Testing in a real Durable Object project
@@ -42,4 +43,3 @@ Test your changes by:
 ## Questions?
 
 Open an issue on GitHub.
-

@@ -1,12 +1,12 @@
 /**
  * @do-manager/admin-hooks
- * 
+ *
  * Admin hooks for Cloudflare Durable Objects that enable integration with DO Manager.
- * 
+ *
  * @example
  * ```typescript
  * import { withAdminHooks } from '@do-manager/admin-hooks';
- * 
+ *
  * export class MyDurableObject extends withAdminHooks() {
  *   // Your existing methods...
  * }
@@ -21,7 +21,10 @@ interface DurableObjectState {
 }
 
 interface SqlStorage {
-  exec<T = Record<string, unknown>>(query: string, ...params: unknown[]): SqlStorageResult<T>;
+  exec<T = Record<string, unknown>>(
+    query: string,
+    ...params: unknown[]
+  ): SqlStorageResult<T>;
 }
 
 interface SqlStorageResult<T> {
@@ -36,12 +39,15 @@ interface SqlStorageResult<T> {
 interface DurableObjectStorage {
   get<T = unknown>(key: string): Promise<T | undefined>;
   get<T = unknown>(keys: string[]): Promise<Map<string, T>>;
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters
   put<T>(key: string, value: T): Promise<void>;
   put<T>(entries: Record<string, T>): Promise<void>;
   delete(key: string): Promise<boolean>;
   delete(keys: string[]): Promise<number>;
   deleteAll(): Promise<void>;
-  list<T = unknown>(options?: DurableObjectStorageListOptions): Promise<Map<string, T>>;
+  list<T = unknown>(
+    options?: DurableObjectStorageListOptions,
+  ): Promise<Map<string, T>>;
   getAlarm(): Promise<number | null>;
   setAlarm(scheduledTime: number | Date): Promise<void>;
   deleteAlarm(): Promise<void>;
@@ -104,7 +110,7 @@ interface AdminImportBody {
  * Special storage key used to mark an instance as frozen (read-only)
  * When set to true, all put/delete operations are blocked
  */
-const FROZEN_STORAGE_KEY = '__do_manager_frozen';
+const FROZEN_STORAGE_KEY = "__do_manager_frozen";
 
 /**
  * Admin hook response types
@@ -168,38 +174,39 @@ export interface AdminHooksOptions {
 
 /**
  * Creates a Durable Object base class with admin hooks for DO Manager integration.
- * 
+ *
  * @param options - Configuration options for admin hooks
  * @returns A class that can be extended by your Durable Object
- * 
+ *
  * @example Basic usage:
  * ```typescript
  * import { withAdminHooks } from '@do-manager/admin-hooks';
- * 
+ *
  * export class MyDurableObject extends withAdminHooks() {
  *   async fetch(request: Request): Promise<Response> {
  *     // Check admin routes first
  *     const adminResponse = await this.handleAdminRequest(request);
  *     if (adminResponse) return adminResponse;
- *     
+ *
  *     // Your custom logic here
  *     return new Response('Hello from my DO!');
  *   }
  * }
  * ```
- * 
+ *
  * @example With authentication:
  * ```typescript
- * export class SecureDO extends withAdminHooks({ 
- *   requireAuth: true, 
- *   adminKey: 'my-secret-key' 
+ * export class SecureDO extends withAdminHooks({
+ *   requireAuth: true,
+ *   adminKey: 'my-secret-key'
  * }) {
  *   // ...
  * }
  * ```
  */
+// eslint-disable-next-line @typescript-eslint/explicit-function-return-type -- Return type is complex class expression, exported via AdminHooksClass type alias
 export function withAdminHooks(options: AdminHooksOptions = {}) {
-  const basePath = options.basePath ?? '/admin';
+  const basePath = options.basePath ?? "/admin";
 
   return class AdminHooksDurableObject {
     state: DurableObjectState;
@@ -225,15 +232,17 @@ export function withAdminHooks(options: AdminHooksOptions = {}) {
 
       // Check authentication if required (timing-safe comparison)
       if (options.requireAuth) {
-        const providedKey = request.headers.get('X-Admin-Key') ?? '';
-        const expectedKey = options.adminKey ?? '';
+        const providedKey = request.headers.get("X-Admin-Key") ?? "";
+        const expectedKey = options.adminKey ?? "";
 
         // Timing-safe comparison to prevent timing attacks
-        if (providedKey.length !== expectedKey.length ||
-          !timingSafeEqual(providedKey, expectedKey)) {
-          return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        if (
+          providedKey.length !== expectedKey.length ||
+          !timingSafeEqual(providedKey, expectedKey)
+        ) {
+          return new Response(JSON.stringify({ error: "Unauthorized" }), {
             status: 401,
-            headers: { 'Content-Type': 'application/json' },
+            headers: { "Content-Type": "application/json" },
           });
         }
       }
@@ -242,133 +251,162 @@ export function withAdminHooks(options: AdminHooksOptions = {}) {
       // Support both /admin/list and /admin/:instanceName/list formats
       const adminPath = path.slice(basePath.length);
       // Extract the operation (last path segment) - handles /list, /MyInstance/list, etc.
-      const pathParts = adminPath.split('/').filter(Boolean);
-      const operation = pathParts.length > 0 ? '/' + pathParts[pathParts.length - 1] : '';
+      const pathParts = adminPath.split("/").filter(Boolean);
+      const operation =
+        pathParts.length > 0 ? "/" + pathParts[pathParts.length - 1] : "";
 
       try {
         // List keys/tables
-        if (operation === '/list' && request.method === 'GET') {
+        if (operation === "/list" && request.method === "GET") {
           return Response.json(await this.adminList());
         }
 
         // Get single value
-        if (operation === '/get' && request.method === 'GET') {
-          const key = url.searchParams.get('key');
+        if (operation === "/get" && request.method === "GET") {
+          const key = url.searchParams.get("key");
           if (!key) {
-            return new Response(JSON.stringify({ error: 'Missing key parameter' }), {
-              status: 400,
-              headers: { 'Content-Type': 'application/json' },
-            });
+            return new Response(
+              JSON.stringify({ error: "Missing key parameter" }),
+              {
+                status: 400,
+                headers: { "Content-Type": "application/json" },
+              },
+            );
           }
           return Response.json(await this.adminGet(key));
         }
 
         // Put value
-        if (operation === '/put' && request.method === 'POST') {
-          const body = await request.json() as AdminPutBody;
+        if (operation === "/put" && request.method === "POST") {
+          const body = (await request.json()) as AdminPutBody;
           if (!body.key) {
-            return new Response(JSON.stringify({ error: 'Missing key in body' }), {
-              status: 400,
-              headers: { 'Content-Type': 'application/json' },
-            });
+            return new Response(
+              JSON.stringify({ error: "Missing key in body" }),
+              {
+                status: 400,
+                headers: { "Content-Type": "application/json" },
+              },
+            );
           }
           await this.adminPut(body.key, body.value);
           return Response.json({ success: true });
         }
 
         // Freeze instance (set read-only)
-        if (operation === '/freeze' && request.method === 'PUT') {
+        if (operation === "/freeze" && request.method === "PUT") {
           return Response.json(await this.adminFreeze());
         }
 
         // Unfreeze instance (remove read-only)
-        if (operation === '/freeze' && request.method === 'DELETE') {
+        if (operation === "/freeze" && request.method === "DELETE") {
           return Response.json(await this.adminUnfreeze());
         }
 
         // Get freeze status
-        if (operation === '/freeze' && request.method === 'GET') {
+        if (operation === "/freeze" && request.method === "GET") {
           return Response.json(await this.adminGetFreezeStatus());
         }
 
         // Delete value
-        if (operation === '/delete' && request.method === 'POST') {
-          const body = await request.json() as AdminDeleteBody;
+        if (operation === "/delete" && request.method === "POST") {
+          const body = (await request.json()) as AdminDeleteBody;
           if (!body.key) {
-            return new Response(JSON.stringify({ error: 'Missing key in body' }), {
-              status: 400,
-              headers: { 'Content-Type': 'application/json' },
-            });
+            return new Response(
+              JSON.stringify({ error: "Missing key in body" }),
+              {
+                status: 400,
+                headers: { "Content-Type": "application/json" },
+              },
+            );
           }
           await this.adminDelete(body.key);
           return Response.json({ success: true });
         }
 
         // Execute SQL (SQLite backend only)
-        if (operation === '/sql' && request.method === 'POST') {
-          const body = await request.json() as AdminSqlBody;
+        if (operation === "/sql" && request.method === "POST") {
+          const body = (await request.json()) as AdminSqlBody;
           if (!body.query) {
-            return new Response(JSON.stringify({ error: 'Missing query in body' }), {
-              status: 400,
-              headers: { 'Content-Type': 'application/json' },
-            });
+            return new Response(
+              JSON.stringify({ error: "Missing query in body" }),
+              {
+                status: 400,
+                headers: { "Content-Type": "application/json" },
+              },
+            );
           }
-          return Response.json(await this.adminSql(body.query));
+          return Response.json(this.adminSql(body.query));
         }
 
         // Get alarm
-        if (operation === '/alarm' && request.method === 'GET') {
+        if (operation === "/alarm" && request.method === "GET") {
           return Response.json(await this.adminGetAlarm());
         }
 
         // Set alarm
-        if (operation === '/alarm' && request.method === 'PUT') {
-          const body = await request.json() as AdminAlarmBody;
-          if (typeof body.timestamp !== 'number') {
-            return new Response(JSON.stringify({ error: 'Missing or invalid timestamp' }), {
-              status: 400,
-              headers: { 'Content-Type': 'application/json' },
-            });
+        if (operation === "/alarm" && request.method === "PUT") {
+          const body = (await request.json()) as AdminAlarmBody;
+          if (typeof body.timestamp !== "number") {
+            return new Response(
+              JSON.stringify({ error: "Missing or invalid timestamp" }),
+              {
+                status: 400,
+                headers: { "Content-Type": "application/json" },
+              },
+            );
           }
           await this.adminSetAlarm(body.timestamp);
           return Response.json({ success: true, alarm: body.timestamp });
         }
 
         // Delete alarm
-        if (operation === '/alarm' && request.method === 'DELETE') {
+        if (operation === "/alarm" && request.method === "DELETE") {
           await this.adminDeleteAlarm();
           return Response.json({ success: true });
         }
 
         // Export all data
-        if (operation === '/export' && request.method === 'GET') {
+        if (operation === "/export" && request.method === "GET") {
           return Response.json(await this.adminExport());
         }
 
         // Import data
-        if (operation === '/import' && request.method === 'POST') {
-          const body = await request.json() as AdminImportBody;
-          if (!body.data || typeof body.data !== 'object') {
-            return new Response(JSON.stringify({ error: 'Missing or invalid data object' }), {
-              status: 400,
-              headers: { 'Content-Type': 'application/json' },
-            });
+        if (operation === "/import" && request.method === "POST") {
+          const body = (await request.json()) as AdminImportBody;
+          if (
+            body.data === null ||
+            body.data === undefined ||
+            typeof body.data !== "object"
+          ) {
+            return new Response(
+              JSON.stringify({ error: "Missing or invalid data object" }),
+              {
+                status: 400,
+                headers: { "Content-Type": "application/json" },
+              },
+            );
           }
           await this.adminImport(body.data);
-          return Response.json({ success: true, imported: Object.keys(body.data).length });
+          return Response.json({
+            success: true,
+            imported: Object.keys(body.data).length,
+          });
         }
 
         // Unknown admin route
-        return new Response(JSON.stringify({ error: 'Unknown admin endpoint' }), {
-          status: 404,
-          headers: { 'Content-Type': 'application/json' },
-        });
-
+        return new Response(
+          JSON.stringify({ error: "Unknown admin endpoint" }),
+          {
+            status: 404,
+            headers: { "Content-Type": "application/json" },
+          },
+        );
       } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unknown error';
+        const message =
+          error instanceof Error ? error.message : "Unknown error";
         return new Response(JSON.stringify({ error: message }), {
           status: 500,
-          headers: { 'Content-Type': 'application/json' },
+          headers: { "Content-Type": "application/json" },
         });
       }
     }
@@ -380,9 +418,9 @@ export function withAdminHooks(options: AdminHooksOptions = {}) {
       // Check for SQLite backend
       if (this.state.storage.sql) {
         const result = this.state.storage.sql.exec<{ name: string }>(
-          "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%'"
+          "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%'",
         );
-        return { tables: result.toArray().map(row => row.name) };
+        return { tables: result.toArray().map((row) => row.name) };
       }
 
       // KV backend
@@ -404,9 +442,12 @@ export function withAdminHooks(options: AdminHooksOptions = {}) {
     async adminPut(key: string, value: unknown): Promise<void> {
       // Allow setting/unsetting the frozen key itself
       if (key !== FROZEN_STORAGE_KEY) {
-        const isFrozen = await this.state.storage.get<boolean>(FROZEN_STORAGE_KEY);
+        const isFrozen =
+          await this.state.storage.get<boolean>(FROZEN_STORAGE_KEY);
         if (isFrozen) {
-          throw new Error('Instance is frozen. Unfreeze before making changes.');
+          throw new Error(
+            "Instance is frozen. Unfreeze before making changes.",
+          );
         }
       }
       await this.state.storage.put(key, value);
@@ -418,9 +459,12 @@ export function withAdminHooks(options: AdminHooksOptions = {}) {
     async adminDelete(key: string): Promise<void> {
       // Allow deleting the frozen key itself (for unfreezing)
       if (key !== FROZEN_STORAGE_KEY) {
-        const isFrozen = await this.state.storage.get<boolean>(FROZEN_STORAGE_KEY);
+        const isFrozen =
+          await this.state.storage.get<boolean>(FROZEN_STORAGE_KEY);
         if (isFrozen) {
-          throw new Error('Instance is frozen. Unfreeze before making changes.');
+          throw new Error(
+            "Instance is frozen. Unfreeze before making changes.",
+          );
         }
       }
       await this.state.storage.delete(key);
@@ -429,9 +473,9 @@ export function withAdminHooks(options: AdminHooksOptions = {}) {
     /**
      * Execute SQL query (SQLite backend only)
      */
-    async adminSql(query: string): Promise<AdminSqlResponse> {
+    adminSql(query: string): AdminSqlResponse {
       if (!this.state.storage.sql) {
-        throw new Error('SQL not available - this DO uses KV storage backend');
+        throw new Error("SQL not available - this DO uses KV storage backend");
       }
 
       const result = this.state.storage.sql.exec(query);
@@ -488,9 +532,10 @@ export function withAdminHooks(options: AdminHooksOptions = {}) {
      * Import data (merge with existing) - blocked if frozen
      */
     async adminImport(data: Record<string, unknown>): Promise<void> {
-      const isFrozen = await this.state.storage.get<boolean>(FROZEN_STORAGE_KEY);
+      const isFrozen =
+        await this.state.storage.get<boolean>(FROZEN_STORAGE_KEY);
       if (isFrozen) {
-        throw new Error('Instance is frozen. Unfreeze before importing data.');
+        throw new Error("Instance is frozen. Unfreeze before importing data.");
       }
       await this.state.storage.put(data);
     }
@@ -518,8 +563,11 @@ export function withAdminHooks(options: AdminHooksOptions = {}) {
      * Get freeze status
      */
     async adminGetFreezeStatus(): Promise<AdminFreezeResponse> {
-      const isFrozen = await this.state.storage.get<boolean>(FROZEN_STORAGE_KEY);
-      const frozenAt = await this.state.storage.get<string>(`${FROZEN_STORAGE_KEY}_at`);
+      const isFrozen =
+        await this.state.storage.get<boolean>(FROZEN_STORAGE_KEY);
+      const frozenAt = await this.state.storage.get<string>(
+        `${FROZEN_STORAGE_KEY}_at`,
+      );
       return { frozen: !!isFrozen, frozenAt: frozenAt ?? undefined };
     }
 
@@ -532,15 +580,18 @@ export function withAdminHooks(options: AdminHooksOptions = {}) {
       if (adminResponse) return adminResponse;
 
       // Default response - override this in your subclass
-      return new Response('Durable Object with admin hooks enabled. Override fetch() to add your logic.', {
-        headers: { 'Content-Type': 'text/plain' },
-      });
+      return new Response(
+        "Durable Object with admin hooks enabled. Override fetch() to add your logic.",
+        {
+          headers: { "Content-Type": "text/plain" },
+        },
+      );
     }
 
     /**
      * Optional alarm handler - override this in your subclass if needed
      */
-    async alarm(): Promise<void> {
+    alarm(): void {
       // Override in subclass to handle alarms
     }
   };
@@ -560,4 +611,3 @@ export type {
   AdminSqlResponse,
   AdminFreezeResponse,
 };
-

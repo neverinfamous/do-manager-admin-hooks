@@ -34,4 +34,3 @@ export class MyDO extends withAdminHooks({
   // ...
 }
 ```
-

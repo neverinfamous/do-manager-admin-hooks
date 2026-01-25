@@ -30,16 +30,20 @@ function withAdminHooks(options = {}) {
       if (options.requireAuth) {
         const providedKey = request.headers.get("X-Admin-Key") ?? "";
         const expectedKey = options.adminKey ?? "";
-        if (providedKey.length !== expectedKey.length || !timingSafeEqual(providedKey, expectedKey)) {
+        if (
+          providedKey.length !== expectedKey.length ||
+          !timingSafeEqual(providedKey, expectedKey)
+        ) {
           return new Response(JSON.stringify({ error: "Unauthorized" }), {
             status: 401,
-            headers: { "Content-Type": "application/json" }
+            headers: { "Content-Type": "application/json" },
           });
         }
       }
       const adminPath = path.slice(basePath.length);
       const pathParts = adminPath.split("/").filter(Boolean);
-      const operation = pathParts.length > 0 ? "/" + pathParts[pathParts.length - 1] : "";
+      const operation =
+        pathParts.length > 0 ? "/" + pathParts[pathParts.length - 1] : "";
       try {
         if (operation === "/list" && request.method === "GET") {
           return Response.json(await this.adminList());
@@ -47,20 +51,26 @@ function withAdminHooks(options = {}) {
         if (operation === "/get" && request.method === "GET") {
           const key = url.searchParams.get("key");
           if (!key) {
-            return new Response(JSON.stringify({ error: "Missing key parameter" }), {
-              status: 400,
-              headers: { "Content-Type": "application/json" }
-            });
+            return new Response(
+              JSON.stringify({ error: "Missing key parameter" }),
+              {
+                status: 400,
+                headers: { "Content-Type": "application/json" },
+              },
+            );
           }
           return Response.json(await this.adminGet(key));
         }
         if (operation === "/put" && request.method === "POST") {
           const body = await request.json();
           if (!body.key) {
-            return new Response(JSON.stringify({ error: "Missing key in body" }), {
-              status: 400,
-              headers: { "Content-Type": "application/json" }
-            });
+            return new Response(
+              JSON.stringify({ error: "Missing key in body" }),
+              {
+                status: 400,
+                headers: { "Content-Type": "application/json" },
+              },
+            );
           }
           await this.adminPut(body.key, body.value);
           return Response.json({ success: true });
@@ -77,10 +87,13 @@ function withAdminHooks(options = {}) {
         if (operation === "/delete" && request.method === "POST") {
           const body = await request.json();
           if (!body.key) {
-            return new Response(JSON.stringify({ error: "Missing key in body" }), {
-              status: 400,
-              headers: { "Content-Type": "application/json" }
-            });
+            return new Response(
+              JSON.stringify({ error: "Missing key in body" }),
+              {
+                status: 400,
+                headers: { "Content-Type": "application/json" },
+              },
+            );
           }
           await this.adminDelete(body.key);
           return Response.json({ success: true });
@@ -88,10 +101,13 @@ function withAdminHooks(options = {}) {
         if (operation === "/sql" && request.method === "POST") {
           const body = await request.json();
           if (!body.query) {
-            return new Response(JSON.stringify({ error: "Missing query in body" }), {
-              status: 400,
-              headers: { "Content-Type": "application/json" }
-            });
+            return new Response(
+              JSON.stringify({ error: "Missing query in body" }),
+              {
+                status: 400,
+                headers: { "Content-Type": "application/json" },
+              },
+            );
           }
           return Response.json(await this.adminSql(body.query));
         }
@@ -101,10 +117,13 @@ function withAdminHooks(options = {}) {
         if (operation === "/alarm" && request.method === "PUT") {
           const body = await request.json();
           if (typeof body.timestamp !== "number") {
-            return new Response(JSON.stringify({ error: "Missing or invalid timestamp" }), {
-              status: 400,
-              headers: { "Content-Type": "application/json" }
-            });
+            return new Response(
+              JSON.stringify({ error: "Missing or invalid timestamp" }),
+              {
+                status: 400,
+                headers: { "Content-Type": "application/json" },
+              },
+            );
           }
           await this.adminSetAlarm(body.timestamp);
           return Response.json({ success: true, alarm: body.timestamp });
@@ -119,23 +138,33 @@ function withAdminHooks(options = {}) {
         if (operation === "/import" && request.method === "POST") {
           const body = await request.json();
           if (!body.data || typeof body.data !== "object") {
-            return new Response(JSON.stringify({ error: "Missing or invalid data object" }), {
-              status: 400,
-              headers: { "Content-Type": "application/json" }
-            });
+            return new Response(
+              JSON.stringify({ error: "Missing or invalid data object" }),
+              {
+                status: 400,
+                headers: { "Content-Type": "application/json" },
+              },
+            );
           }
           await this.adminImport(body.data);
-          return Response.json({ success: true, imported: Object.keys(body.data).length });
+          return Response.json({
+            success: true,
+            imported: Object.keys(body.data).length,
+          });
         }
-        return new Response(JSON.stringify({ error: "Unknown admin endpoint" }), {
-          status: 404,
-          headers: { "Content-Type": "application/json" }
-        });
+        return new Response(
+          JSON.stringify({ error: "Unknown admin endpoint" }),
+          {
+            status: 404,
+            headers: { "Content-Type": "application/json" },
+          },
+        );
       } catch (error) {
-        const message = error instanceof Error ? error.message : "Unknown error";
+        const message =
+          error instanceof Error ? error.message : "Unknown error";
         return new Response(JSON.stringify({ error: message }), {
           status: 500,
-          headers: { "Content-Type": "application/json" }
+          headers: { "Content-Type": "application/json" },
         });
       }
     }
@@ -145,7 +174,7 @@ function withAdminHooks(options = {}) {
     async adminList() {
       if (this.state.storage.sql) {
         const result = this.state.storage.sql.exec(
-          "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%'"
+          "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%'",
         );
         return { tables: result.toArray().map((row) => row.name) };
       }
@@ -166,7 +195,9 @@ function withAdminHooks(options = {}) {
       if (key !== FROZEN_STORAGE_KEY) {
         const isFrozen = await this.state.storage.get(FROZEN_STORAGE_KEY);
         if (isFrozen) {
-          throw new Error("Instance is frozen. Unfreeze before making changes.");
+          throw new Error(
+            "Instance is frozen. Unfreeze before making changes.",
+          );
         }
       }
       await this.state.storage.put(key, value);
@@ -178,7 +209,9 @@ function withAdminHooks(options = {}) {
       if (key !== FROZEN_STORAGE_KEY) {
         const isFrozen = await this.state.storage.get(FROZEN_STORAGE_KEY);
         if (isFrozen) {
-          throw new Error("Instance is frozen. Unfreeze before making changes.");
+          throw new Error(
+            "Instance is frozen. Unfreeze before making changes.",
+          );
         }
       }
       await this.state.storage.delete(key);
@@ -195,7 +228,7 @@ function withAdminHooks(options = {}) {
       return {
         result: rows,
         rowCount: rows.length,
-        columns: result.columnNames
+        columns: result.columnNames,
       };
     }
     /**
@@ -228,8 +261,8 @@ function withAdminHooks(options = {}) {
       }
       return {
         data,
-        exportedAt: (/* @__PURE__ */ new Date()).toISOString(),
-        keyCount: entries.size
+        exportedAt: /* @__PURE__ */ new Date().toISOString(),
+        keyCount: entries.size,
       };
     }
     /**
@@ -246,7 +279,7 @@ function withAdminHooks(options = {}) {
      * Freeze the instance (set read-only mode)
      */
     async adminFreeze() {
-      const frozenAt = (/* @__PURE__ */ new Date()).toISOString();
+      const frozenAt = /* @__PURE__ */ new Date().toISOString();
       await this.state.storage.put(FROZEN_STORAGE_KEY, true);
       await this.state.storage.put(`${FROZEN_STORAGE_KEY}_at`, frozenAt);
       return { frozen: true, frozenAt };
@@ -273,17 +306,17 @@ function withAdminHooks(options = {}) {
     async fetch(request) {
       const adminResponse = await this.handleAdminRequest(request);
       if (adminResponse) return adminResponse;
-      return new Response("Durable Object with admin hooks enabled. Override fetch() to add your logic.", {
-        headers: { "Content-Type": "text/plain" }
-      });
+      return new Response(
+        "Durable Object with admin hooks enabled. Override fetch() to add your logic.",
+        {
+          headers: { "Content-Type": "text/plain" },
+        },
+      );
     }
     /**
      * Optional alarm handler - override this in your subclass if needed
      */
-    async alarm() {
-    }
+    async alarm() {}
   };
 }
-export {
-  withAdminHooks
-};
+export { withAdminHooks };

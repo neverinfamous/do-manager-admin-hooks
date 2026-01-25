@@ -6,15 +6,23 @@ All notable changes to `do-manager-admin-hooks`.
 
 ## [Unreleased]
 
+### Added
+
+- **ESLint Configuration**: Added strict TypeScript ESLint configuration matching other manager projects
+  - Strict type checking with `strictTypeChecked` and `stylisticTypeChecked` presets
+  - Added `lint`, `lint:fix`, and `check` npm scripts
+
 ### Changed
 
 - **Dependencies**: Updated `@cloudflare/workers-types` from 4.20251229.0 to 4.20260124.0
+- **Dependencies**: Added ESLint 9.x with TypeScript ESLint support
 
 ---
 
 ## [1.1.1] - 2026-01-05
 
 ### Fixed
+
 - **Routing fix** for instance name prefixes in admin paths
   - Now supports both `/admin/export` and `/admin/:instanceName/export` formats
   - Fixes instance migration not copying storage keys
@@ -24,6 +32,7 @@ All notable changes to `do-manager-admin-hooks`.
 ## [1.1.0] - 2026-01-05
 
 ### Added
+
 - **Freeze/Unfreeze endpoints** for instance migration support
   - `PUT /admin/:name/freeze` - Freeze instance (block writes)
   - `DELETE /admin/:name/freeze` - Unfreeze instance (allow writes)
@@ -36,6 +45,7 @@ All notable changes to `do-manager-admin-hooks`.
 ## [1.0.1] - 2025-12-01
 
 ### Fixed
+
 - Minor documentation updates
 
 ---
@@ -43,6 +53,7 @@ All notable changes to `do-manager-admin-hooks`.
 ## [1.0.0] - 2025-11-29
 
 ### Added
+
 - Initial release
 - **Storage Operations**
   - `GET /admin/list` - List storage keys (KV) or tables (SQLite)

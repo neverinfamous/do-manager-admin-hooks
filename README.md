@@ -14,7 +14,7 @@ npm install do-manager-admin-hooks
 ## Quick Start
 
 ```typescript
-import { withAdminHooks } from 'do-manager-admin-hooks';
+import { withAdminHooks } from "do-manager-admin-hooks";
 
 export class MyDurableObject extends withAdminHooks() {
   async fetch(request: Request): Promise<Response> {
@@ -23,7 +23,7 @@ export class MyDurableObject extends withAdminHooks() {
     if (adminResponse) return adminResponse;
 
     // Your custom logic here
-    return new Response('Hello from my Durable Object!');
+    return new Response("Hello from my Durable Object!");
   }
 }
 ```
@@ -33,11 +33,11 @@ export class MyDurableObject extends withAdminHooks() {
 ```typescript
 export class SecureDO extends withAdminHooks({
   // Change the base path for admin endpoints (default: '/admin')
-  basePath: '/admin',
-  
+  basePath: "/admin",
+
   // Require authentication for admin endpoints (recommended for production)
   requireAuth: true,
-  adminKey: 'your-secret-key',
+  adminKey: "your-secret-key",
 }) {
   // ...
 }
@@ -47,25 +47,26 @@ export class SecureDO extends withAdminHooks({
 
 Once you extend `withAdminHooks()`, your Durable Object exposes these endpoints:
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/admin/list` | GET | List storage keys (KV) or tables (SQLite) |
-| `/admin/get?key=X` | GET | Get value for a key |
-| `/admin/put` | POST | Set key-value pair (`{ key, value }`) |
-| `/admin/delete` | POST | Delete a key (`{ key }`) |
-| `/admin/sql` | POST | Execute SQL (`{ query }`) - SQLite only |
-| `/admin/alarm` | GET | Get current alarm |
-| `/admin/alarm` | PUT | Set alarm (`{ timestamp }`) |
-| `/admin/alarm` | DELETE | Delete alarm |
-| `/admin/export` | GET | Export all storage as JSON |
-| `/admin/import` | POST | Import data (`{ data: {...} }`) |
-| `/admin/:name/freeze` | PUT | Freeze instance (block writes) |
-| `/admin/:name/freeze` | DELETE | Unfreeze instance (allow writes) |
-| `/admin/:name/freeze` | GET | Get freeze status |
+| Endpoint              | Method | Description                               |
+| --------------------- | ------ | ----------------------------------------- |
+| `/admin/list`         | GET    | List storage keys (KV) or tables (SQLite) |
+| `/admin/get?key=X`    | GET    | Get value for a key                       |
+| `/admin/put`          | POST   | Set key-value pair (`{ key, value }`)     |
+| `/admin/delete`       | POST   | Delete a key (`{ key }`)                  |
+| `/admin/sql`          | POST   | Execute SQL (`{ query }`) - SQLite only   |
+| `/admin/alarm`        | GET    | Get current alarm                         |
+| `/admin/alarm`        | PUT    | Set alarm (`{ timestamp }`)               |
+| `/admin/alarm`        | DELETE | Delete alarm                              |
+| `/admin/export`       | GET    | Export all storage as JSON                |
+| `/admin/import`       | POST   | Import data (`{ data: {...} }`)           |
+| `/admin/:name/freeze` | PUT    | Freeze instance (block writes)            |
+| `/admin/:name/freeze` | DELETE | Unfreeze instance (allow writes)          |
+| `/admin/:name/freeze` | GET    | Get freeze status                         |
 
 ### Freeze Operations
 
 Freeze functionality is used for instance migration cutover modes. When an instance is frozen:
+
 - `PUT`, `DELETE`, and `IMPORT` operations return `423 Locked`
 - Read operations (`GET`, `LIST`, `EXPORT`) continue to work
 
@@ -97,12 +98,12 @@ Features timing-safe key comparison to prevent timing attacks.
 Full TypeScript support with exported types:
 
 ```typescript
-import { 
-  withAdminHooks, 
+import {
+  withAdminHooks,
   AdminHooksOptions,
   AdminListResponse,
-  AdminExportResponse 
-} from 'do-manager-admin-hooks';
+  AdminExportResponse,
+} from "do-manager-admin-hooks";
 ```
 
 ## Links

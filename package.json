@@ -16,10 +16,14 @@
     "dist",
     "README.md"
   ],
+  "type": "module",
   "scripts": {
     "build": "tsup src/index.ts --format cjs,esm --dts --clean",
     "prepublishOnly": "npm run build",
-    "typecheck": "tsc --noEmit"
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "typecheck": "tsc --noEmit",
+    "check": "npm run lint && npm run typecheck"
   },
   "keywords": [
     "cloudflare",
@@ -41,8 +45,12 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260124.0",
+    "@eslint/js": "^9.39.2",
+    "eslint": "^9.39.2",
+    "globals": "^17.1.0",
     "tsup": "^8.3.5",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.53.1"
   },
   "peerDependencies": {
     "@cloudflare/workers-types": ">=4.0.0"
