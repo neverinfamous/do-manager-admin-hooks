@@ -39,9 +39,8 @@ interface SqlStorageResult<T> {
 interface DurableObjectStorage {
   get<T = unknown>(key: string): Promise<T | undefined>;
   get<T = unknown>(keys: string[]): Promise<Map<string, T>>;
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters
-  put<T>(key: string, value: T): Promise<void>;
-  put<T>(entries: Record<string, T>): Promise<void>;
+  put(key: string, value: unknown): Promise<void>;
+  put(entries: Record<string, unknown>): Promise<void>;
   delete(key: string): Promise<boolean>;
   delete(keys: string[]): Promise<number>;
   deleteAll(): Promise<void>;
@@ -146,6 +145,38 @@ interface AdminFreezeResponse {
 }
 
 /**
+ * Interface representing an instance of AdminHooksDurableObject
+ */
+export interface AdminHooksInstance {
+  state: DurableObjectState;
+  env: unknown;
+  handleAdminRequest(request: Request): Promise<Response | null>;
+  adminList(): Promise<AdminListResponse>;
+  adminGet(key: string): Promise<AdminGetResponse>;
+  adminPut(key: string, value: unknown): Promise<void>;
+  adminDelete(key: string): Promise<void>;
+  adminSql(query: string): AdminSqlResponse;
+  adminGetAlarm(): Promise<AdminAlarmResponse>;
+  adminSetAlarm(timestamp: number): Promise<void>;
+  adminDeleteAlarm(): Promise<void>;
+  adminExport(): Promise<AdminExportResponse>;
+  adminImport(data: Record<string, unknown>): Promise<void>;
+  adminFreeze(): Promise<AdminFreezeResponse>;
+  adminUnfreeze(): Promise<AdminFreezeResponse>;
+  adminGetFreezeStatus(): Promise<AdminFreezeResponse>;
+  fetch(request: Request): Promise<Response>;
+  alarm(): void;
+}
+
+/**
+ * Constructor type for AdminHooksDurableObject class
+ */
+export type AdminHooksConstructor = new (
+  state: DurableObjectState,
+  env: unknown,
+) => AdminHooksInstance;
+
+/**
  * Configuration options for admin hooks
  */
 export interface AdminHooksOptions {
@@ -204,11 +235,12 @@ export interface AdminHooksOptions {
  * }
  * ```
  */
-// eslint-disable-next-line @typescript-eslint/explicit-function-return-type -- Return type is complex class expression, exported via AdminHooksClass type alias
-export function withAdminHooks(options: AdminHooksOptions = {}) {
+export function withAdminHooks(
+  options: AdminHooksOptions = {},
+): AdminHooksConstructor {
   const basePath = options.basePath ?? "/admin";
 
-  return class AdminHooksDurableObject {
+  class AdminHooksDurableObject {
     state: DurableObjectState;
     env: unknown;
 
@@ -594,7 +626,9 @@ export function withAdminHooks(options: AdminHooksOptions = {}) {
     alarm(): void {
       // Override in subclass to handle alarms
     }
-  };
+  }
+
+  return AdminHooksDurableObject;
 }
 
 /**

@@ -11,11 +11,15 @@ All notable changes to `do-manager-admin-hooks`.
 - **ESLint Configuration**: Added strict TypeScript ESLint configuration matching other manager projects
   - Strict type checking with `strictTypeChecked` and `stylisticTypeChecked` presets
   - Added `lint`, `lint:fix`, and `check` npm scripts
+- **Type Exports**: Added `AdminHooksInstance` and `AdminHooksConstructor` types for explicit typing
 
 ### Changed
 
-- **Dependencies**: Updated `@cloudflare/workers-types` from 4.20260124.0 to 4.20260127.0
-- **Dependencies**: Updated `typescript-eslint` from 8.53.1 to 8.54.0
+- **Code Quality**: Removed eslint-disable comments by properly typing the codebase
+  - Simplified `DurableObjectStorage.put()` overloads to use `unknown` instead of unnecessary generic
+  - Added explicit return type `AdminHooksConstructor` to `withAdminHooks()` function
+- **Dependencies**: Updated `@cloudflare/workers-types` from 4.20260127.0 to 4.20260203.0
+- **Dependencies**: Updated `globals` from 17.1.0 to 17.3.0
 
 ---
 
