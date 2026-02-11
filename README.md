@@ -1,6 +1,6 @@
 # do-manager-admin-hooks
 
-**Last Updated: February 4, 2026**
+**Last Updated February 10, 2026**
 
 [![npm](https://img.shields.io/npm/v/do-manager-admin-hooks)](https://www.npmjs.com/package/do-manager-admin-hooks)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
