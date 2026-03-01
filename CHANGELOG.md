@@ -20,7 +20,10 @@ All notable changes to `do-manager-admin-hooks`.
   - Added explicit return type `AdminHooksConstructor` to `withAdminHooks()` function
 - **Dependencies**: Migrated ESLint from v9 to v10 (`eslint` 9.39.2 → 10.0.1, `@eslint/js` 9.39.2 → 10.0.1)
 - **Dependencies**: Updated `@cloudflare/workers-types` from 4.20260210.0 to 4.20260302.0
-- **Dependencies**: Updated `typescript-eslint` from 8.55.0 to 8.56.0
+- **Dependencies**: Updated `typescript-eslint` from 8.55.0 to 8.56.1
+- **Dependencies**: Updated `@cloudflare/workers-types` from 4.20260302.0 to 4.20260305.0
+- **Dependencies**: Updated `eslint` from 10.0.1 to 10.0.2
+- **Dependencies**: Updated `globals` from 17.3.0 to 17.4.0
 
 ### Fixed
 
