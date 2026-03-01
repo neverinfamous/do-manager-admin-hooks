@@ -27,7 +27,7 @@ All notable changes to `do-manager-admin-hooks`.
 
 ### Fixed
 
-- **Security**: Added `minimatch` override (`>=10.2.1`) to patch ReDoS vulnerability in transitive dependency
+- **Security**: Bumped `minimatch` override (`>=10.2.1` → `>=10.2.4`) to patch GLOBSTAR combinatorial backtracking ReDoS in transitive dependency
 
 ### Documentation
 
