@@ -34,8 +34,8 @@ interface SqlStorageResult<T> {
 interface DurableObjectStorage {
   get<T = unknown>(key: string): Promise<T | undefined>;
   get<T = unknown>(keys: string[]): Promise<Map<string, T>>;
-  put<T>(key: string, value: T): Promise<void>;
-  put<T>(entries: Record<string, T>): Promise<void>;
+  put(key: string, value: unknown): Promise<void>;
+  put(entries: Record<string, unknown>): Promise<void>;
   delete(key: string): Promise<boolean>;
   delete(keys: string[]): Promise<number>;
   deleteAll(): Promise<void>;
@@ -87,6 +87,36 @@ interface AdminFreezeResponse {
   frozen: boolean;
   frozenAt?: string;
 }
+/**
+ * Interface representing an instance of AdminHooksDurableObject
+ */
+interface AdminHooksInstance {
+  state: DurableObjectState;
+  env: unknown;
+  handleAdminRequest(request: Request): Promise<Response | null>;
+  adminList(): Promise<AdminListResponse>;
+  adminGet(key: string): Promise<AdminGetResponse>;
+  adminPut(key: string, value: unknown): Promise<void>;
+  adminDelete(key: string): Promise<void>;
+  adminSql(query: string): AdminSqlResponse;
+  adminGetAlarm(): Promise<AdminAlarmResponse>;
+  adminSetAlarm(timestamp: number): Promise<void>;
+  adminDeleteAlarm(): Promise<void>;
+  adminExport(): Promise<AdminExportResponse>;
+  adminImport(data: Record<string, unknown>): Promise<void>;
+  adminFreeze(): Promise<AdminFreezeResponse>;
+  adminUnfreeze(): Promise<AdminFreezeResponse>;
+  adminGetFreezeStatus(): Promise<AdminFreezeResponse>;
+  fetch(request: Request): Promise<Response>;
+  alarm(): void;
+}
+/**
+ * Constructor type for AdminHooksDurableObject class
+ */
+type AdminHooksConstructor = new (
+  state: DurableObjectState,
+  env: unknown,
+) => AdminHooksInstance;
 /**
  * Configuration options for admin hooks
  */
@@ -142,80 +172,9 @@ interface AdminHooksOptions {
  * }
  * ```
  */
-declare function withAdminHooks(options?: AdminHooksOptions): {
-  new (
-    state: DurableObjectState,
-    env: unknown,
-  ): {
-    state: DurableObjectState;
-    env: unknown;
-    /**
-     * Handle admin requests. Call this at the start of your fetch handler.
-     * Returns a Response if the request was an admin request, or null if not.
-     */
-    handleAdminRequest(request: Request): Promise<Response | null>;
-    /**
-     * List all storage keys or SQL tables
-     */
-    adminList(): Promise<AdminListResponse>;
-    /**
-     * Get a single storage value
-     */
-    adminGet(key: string): Promise<AdminGetResponse>;
-    /**
-     * Put a storage value (blocked if frozen, unless it's the frozen key itself)
-     */
-    adminPut(key: string, value: unknown): Promise<void>;
-    /**
-     * Delete a storage value (blocked if frozen, unless it's the frozen key itself)
-     */
-    adminDelete(key: string): Promise<void>;
-    /**
-     * Execute SQL query (SQLite backend only)
-     */
-    adminSql(query: string): Promise<AdminSqlResponse>;
-    /**
-     * Get current alarm timestamp
-     */
-    adminGetAlarm(): Promise<AdminAlarmResponse>;
-    /**
-     * Set alarm
-     */
-    adminSetAlarm(timestamp: number): Promise<void>;
-    /**
-     * Delete alarm
-     */
-    adminDeleteAlarm(): Promise<void>;
-    /**
-     * Export all storage data
-     */
-    adminExport(): Promise<AdminExportResponse>;
-    /**
-     * Import data (merge with existing) - blocked if frozen
-     */
-    adminImport(data: Record<string, unknown>): Promise<void>;
-    /**
-     * Freeze the instance (set read-only mode)
-     */
-    adminFreeze(): Promise<AdminFreezeResponse>;
-    /**
-     * Unfreeze the instance (remove read-only mode)
-     */
-    adminUnfreeze(): Promise<AdminFreezeResponse>;
-    /**
-     * Get freeze status
-     */
-    adminGetFreezeStatus(): Promise<AdminFreezeResponse>;
-    /**
-     * Default fetch handler - override this in your subclass
-     */
-    fetch(request: Request): Promise<Response>;
-    /**
-     * Optional alarm handler - override this in your subclass if needed
-     */
-    alarm(): Promise<void>;
-  };
-};
+declare function withAdminHooks(
+  options?: AdminHooksOptions,
+): AdminHooksConstructor;
 /**
  * Type helper for extending the admin hooks class
  */
@@ -227,6 +186,8 @@ export {
   type AdminFreezeResponse,
   type AdminGetResponse,
   type AdminHooksClass,
+  type AdminHooksConstructor,
+  type AdminHooksInstance,
   type AdminHooksOptions,
   type AdminListResponse,
   type AdminSqlResponse,
