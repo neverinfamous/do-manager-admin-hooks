@@ -1,4 +1,32 @@
+"use strict";
+var __defProp = Object.defineProperty;
+var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
+};
+var __copyProps = (to, from, except, desc) => {
+  if ((from && typeof from === "object") || typeof from === "function") {
+    for (let key of __getOwnPropNames(from))
+      if (!__hasOwnProp.call(to, key) && key !== except)
+        __defProp(to, key, {
+          get: () => from[key],
+          enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable,
+        });
+  }
+  return to;
+};
+var __toCommonJS = (mod) =>
+  __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+
 // src/index.ts
+var index_exports = {};
+__export(index_exports, {
+  withAdminHooks: () => withAdminHooks,
+});
+module.exports = __toCommonJS(index_exports);
 function timingSafeEqual(a, b) {
   if (a.length !== b.length) return false;
   let result = 0;
@@ -10,7 +38,7 @@ function timingSafeEqual(a, b) {
 var FROZEN_STORAGE_KEY = "__do_manager_frozen";
 function withAdminHooks(options = {}) {
   const basePath = options.basePath ?? "/admin";
-  return class AdminHooksDurableObject {
+  class AdminHooksDurableObject {
     state;
     env;
     constructor(state, env) {
@@ -109,7 +137,7 @@ function withAdminHooks(options = {}) {
               },
             );
           }
-          return Response.json(await this.adminSql(body.query));
+          return Response.json(this.adminSql(body.query));
         }
         if (operation === "/alarm" && request.method === "GET") {
           return Response.json(await this.adminGetAlarm());
@@ -137,7 +165,11 @@ function withAdminHooks(options = {}) {
         }
         if (operation === "/import" && request.method === "POST") {
           const body = await request.json();
-          if (!body.data || typeof body.data !== "object") {
+          if (
+            body.data === null ||
+            body.data === void 0 ||
+            typeof body.data !== "object"
+          ) {
             return new Response(
               JSON.stringify({ error: "Missing or invalid data object" }),
               {
@@ -219,7 +251,7 @@ function withAdminHooks(options = {}) {
     /**
      * Execute SQL query (SQLite backend only)
      */
-    async adminSql(query) {
+    adminSql(query) {
       if (!this.state.storage.sql) {
         throw new Error("SQL not available - this DO uses KV storage backend");
       }
@@ -316,7 +348,12 @@ function withAdminHooks(options = {}) {
     /**
      * Optional alarm handler - override this in your subclass if needed
      */
-    async alarm() {}
-  };
+    alarm() {}
+  }
+  return AdminHooksDurableObject;
 }
-export { withAdminHooks };
+// Annotate the CommonJS export names for ESM import in node:
+0 &&
+  (module.exports = {
+    withAdminHooks,
+  });

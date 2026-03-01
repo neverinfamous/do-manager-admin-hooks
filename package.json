@@ -1,6 +1,6 @@
 {
   "name": "do-manager-admin-hooks",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "Admin hooks for Cloudflare Durable Objects - enables DO Manager integration",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
@@ -56,6 +56,6 @@
     "@cloudflare/workers-types": ">=4.0.0"
   },
   "overrides": {
-    "minimatch": ">=10.2.1"
+    "minimatch": ">=10.2.4"
   }
 }

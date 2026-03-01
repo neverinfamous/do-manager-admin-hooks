@@ -6,6 +6,10 @@ All notable changes to `do-manager-admin-hooks`.
 
 ## [Unreleased]
 
+---
+
+## [1.1.2] - 2026-03-01
+
 ### Added
 
 - **ESLint Configuration**: Added strict TypeScript ESLint configuration matching other manager projects
@@ -19,12 +23,14 @@ All notable changes to `do-manager-admin-hooks`.
   - Simplified `DurableObjectStorage.put()` overloads to use `unknown` instead of unnecessary generic
   - Added explicit return type `AdminHooksConstructor` to `withAdminHooks()` function
 - **Dependencies**: Migrated ESLint from v9 to v10 (`eslint` 9.39.2 → 10.0.1, `@eslint/js` 9.39.2 → 10.0.1)
-- **Dependencies**: Updated `@cloudflare/workers-types` from 4.20260210.0 to 4.20260302.0
-- **Dependencies**: Updated `typescript-eslint` from 8.55.0 to 8.56.0
+- **Dependencies**: Updated `@cloudflare/workers-types` from 4.20260210.0 to 4.20260305.0
+- **Dependencies**: Updated `typescript-eslint` from 8.55.0 to 8.56.1
+- **Dependencies**: Updated `eslint` from 10.0.1 to 10.0.2
+- **Dependencies**: Updated `globals` from 17.3.0 to 17.4.0
 
 ### Fixed
 
-- **Security**: Added `minimatch` override (`>=10.2.1`) to patch ReDoS vulnerability in transitive dependency
+- **Security**: Bumped `minimatch` override (`>=10.2.1` → `>=10.2.4`) to patch GLOBSTAR combinatorial backtracking ReDoS in transitive dependency
 
 ### Documentation
 
