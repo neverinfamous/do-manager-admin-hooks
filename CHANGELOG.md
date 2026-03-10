@@ -6,6 +6,14 @@ All notable changes to `do-manager-admin-hooks`.
 
 ## [Unreleased]
 
+### Changed
+
+**Dependency Updates**
+
+- Updated `@cloudflare/workers-types` to `4.20260310.1`
+- Updated `eslint` to `10.0.3`
+- Updated `typescript-eslint` to `8.57.0`
+
 ---
 
 ## [1.1.2] - 2026-03-01
