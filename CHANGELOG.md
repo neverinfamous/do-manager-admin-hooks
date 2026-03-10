@@ -6,6 +6,10 @@ All notable changes to `do-manager-admin-hooks`.
 
 ## [Unreleased]
 
+---
+
+## [1.1.3] - 2026-03-10
+
 ### Changed
 
 **Dependency Updates**
