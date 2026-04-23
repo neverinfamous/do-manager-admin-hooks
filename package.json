@@ -1,6 +1,6 @@
 {
   "name": "do-manager-admin-hooks",
-  "version": "1.1.5",
+  "version": "1.1.6",
   "description": "Admin hooks for Cloudflare Durable Objects - enables DO Manager integration",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
@@ -17,6 +17,9 @@
     "README.md"
   ],
   "type": "module",
+  "engines": {
+    "node": ">=24.0.0"
+  },
   "scripts": {
     "build": "tsup src/index.ts --format cjs,esm --dts --clean",
     "prepublishOnly": "npm run build",
