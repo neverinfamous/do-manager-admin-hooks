@@ -44,13 +44,13 @@
     "url": "https://github.com/neverinfamous/do-manager-admin-hooks/issues"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20260405.1",
+    "@cloudflare/workers-types": "^4.20260422.2",
     "@eslint/js": "^10.0.1",
-    "eslint": "^10.2.0",
-    "globals": "^17.3.0",
+    "eslint": "^10.2.1",
+    "globals": "^17.5.0",
     "tsup": "^8.3.5",
-    "typescript": "^6.0.2",
-    "typescript-eslint": "^8.58.0"
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.59.0"
   },
   "peerDependencies": {
     "@cloudflare/workers-types": ">=4.0.0"
