@@ -4,7 +4,19 @@ All notable changes to `do-manager-admin-hooks`.
 
 ---
 
-## [Unreleased](https://github.com/neverinfamous/do-manager-admin-hooks/compare/v1.1.6...HEAD)
+## [Unreleased](https://github.com/neverinfamous/do-manager-admin-hooks/compare/v1.1.7...HEAD)
+
+---
+
+## [1.1.7](https://github.com/neverinfamous/do-manager-admin-hooks/releases/tag/v1.1.7) - 2026-05-05
+
+### Changed
+
+- **Dependency Updates:**
+  - `@cloudflare/workers-types` to `^4.20260506.1`
+  - `eslint` to `^10.3.0`
+  - `globals` to `^17.6.0`
+  - `typescript-eslint` to `^8.59.2`
 
 ---
 
