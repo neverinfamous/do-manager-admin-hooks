@@ -1,5 +1,3 @@
-import type { z } from 'zod';
-
 function mapCategory(cat: string): string {
   const map: Record<string, string> = {
     feat: 'Features',
@@ -27,10 +25,10 @@ function formatDate(dateStr: string): string {
 }
 
 export default function formatChangelog(
-  versionMap: Map<string, Map<string, any[]>>,
+  versionMap: Map<string, Map<string, Record<string, unknown>[]>>,
   repoHost: string,
   repoPath: string,
-  args: any
+  _args: unknown
 ): string {
   console.log('Running formatChangelog with', versionMap.size, 'versions');
   let md = `# Changelog\n\n`;
@@ -42,7 +40,7 @@ export default function formatChangelog(
     if (version !== 'Unreleased') {
        for (const commits of categoryMap.values()) {
          if (commits.length > 0 && commits[0].authorDate) {
-            versionDate = formatDate(commits[0].authorDate);
+            versionDate = formatDate(commits[0].authorDate as string);
             break;
          }
        }
@@ -68,8 +66,8 @@ export default function formatChangelog(
       
       // Filter out low-impact commits to keep the changelog concise
       commits = commits.filter(commit => {
-        if (commit.metadata?.impact !== undefined) {
-          const impact = parseFloat(commit.metadata.impact);
+        if (typeof commit.metadata === 'object' && commit.metadata !== null && 'impact' in commit.metadata) {
+          const impact = parseFloat(commit.metadata.impact as string);
           if (!isNaN(impact) && impact < 0.4) return false;
         }
         return true;
@@ -80,17 +78,17 @@ export default function formatChangelog(
       md += `### ${mapCategory(cat)}\n\n`;
       for (const commit of commits) {
         const isBreaking = commit.isBreaking ? '**[BREAKING]** ' : '';
-        const shortSha = commit.commit.substring(0, 7);
+        const shortSha = String(commit.commit).substring(0, 7);
         const link = `([${shortSha}](https://${repoHost}/${repoPath}/commit/${commit.commit}))`;
         
         let authorStr = commit.author ? ` by **${commit.author}**` : '';
-        if (commit.coAuthors && commit.coAuthors.length > 0) {
-          const co = commit.coAuthors.map((c: string) => c.split('<')[0].trim()).join(', ');
+        if (Array.isArray(commit.coAuthors) && commit.coAuthors.length > 0) {
+          const co = commit.coAuthors.map((c: unknown) => String(c).split('<')[0].trim()).join(', ');
           authorStr += ` (with ${co})`;
         }
 
-        const entries = (commit.metadata && commit.metadata.entry && commit.metadata.entry.length > 0) 
-          ? commit.metadata.entry 
+        const entries = (typeof commit.metadata === 'object' && commit.metadata !== null && Array.isArray((commit.metadata as Record<string, unknown>).entry) && ((commit.metadata as Record<string, unknown>).entry as unknown[]).length > 0) 
+          ? (commit.metadata as Record<string, unknown>).entry as unknown[]
           : [commit.cleanSubject || commit.subject];
           
         for (const entry of entries) {
