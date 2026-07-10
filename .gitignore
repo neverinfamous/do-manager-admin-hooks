@@ -1,8 +1,8 @@
 # Dependencies
 node_modules/
 
-# Build output (include in git for npm publish)
-# dist/
+# Build output
+dist/
 
 # Environment files
 .env
