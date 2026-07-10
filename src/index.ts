@@ -1,3 +1,6 @@
+import { z } from 'zod';
+import { match } from 'ts-pattern';
+
 /**
  * @do-manager/admin-hooks
  *
@@ -87,6 +90,36 @@ function timingSafeEqual(a: string, b: string): boolean {
  * Special storage key used to mark an instance as frozen (read-only)
  * When set to true, all put/delete operations are blocked
  */
+
+export const HTTP_STATUS = {
+  OK: 200,
+  BAD_REQUEST: 400,
+  UNAUTHORIZED: 401,
+  NOT_FOUND: 404,
+  INTERNAL_SERVER_ERROR: 500,
+} as const;
+
+const PutPayloadSchema = z.object({
+  key: z.string().min(1, 'Key cannot be empty'),
+  value: z.unknown(),
+});
+
+const DeletePayloadSchema = z.object({
+  key: z.string().min(1, 'Key cannot be empty'),
+});
+
+const SqlPayloadSchema = z.object({
+  query: z.string().min(1, 'Query cannot be empty'),
+});
+
+const AlarmPayloadSchema = z.object({
+  timestamp: z.number(),
+});
+
+const ImportPayloadSchema = z.object({
+  data: z.record(z.string(), z.unknown()),
+});
+
 const FROZEN_STORAGE_KEY = "__do_manager_frozen";
 
 /**
@@ -184,7 +217,7 @@ export interface AdminHooksOptions {
 /**
  * Utility to create a standardized JSON error response
  */
-function createErrorResponse(message: string, status = 400): Response {
+function createErrorResponse(message: string, status: number = HTTP_STATUS.BAD_REQUEST): Response {
   return new Response(JSON.stringify({ error: message }), {
     status,
     headers: { "Content-Type": "application/json" },
@@ -256,161 +289,95 @@ export function withAdminHooks(
       const url = new URL(request.url);
       const path = url.pathname;
 
-      // Check if this is an admin request
       if (!path.startsWith(basePath)) {
         return null;
       }
 
-      // Check authentication if required (timing-safe comparison)
       if (options.requireAuth) {
         const providedKey = request.headers.get("X-Admin-Key") ?? "";
         const expectedKey = options.adminKey ?? "";
 
-        // Timing-safe comparison to prevent timing attacks
         if (
           providedKey.length !== expectedKey.length ||
           !timingSafeEqual(providedKey, expectedKey)
         ) {
-          return createErrorResponse("Unauthorized", 401);
+          return createErrorResponse("Unauthorized", HTTP_STATUS.UNAUTHORIZED);
         }
       }
 
-      // Route admin requests
-      // Support both /admin/list and /admin/:instanceName/list formats
       const adminPath = path.slice(basePath.length);
-      // Extract the operation (last path segment) - handles /list, /MyInstance/list, etc.
       const pathParts = adminPath.split("/").filter(Boolean);
-      const operation =
-        pathParts.length > 0 ? "/" + pathParts[pathParts.length - 1] : "";
+      const operation = pathParts.length > 0 ? "/" + pathParts[pathParts.length - 1] : "";
 
       try {
-        // List keys/tables
-        if (operation === "/list" && request.method === "GET") {
-          return Response.json(await this.adminList());
-        }
-
-        // Get single value
-        if (operation === "/get" && request.method === "GET") {
-          const key = url.searchParams.get("key");
-          if (!key) {
-            return createErrorResponse("Missing key parameter");
-          }
-          return Response.json(await this.adminGet(key));
-        }
-
-        // Put value
-        if (operation === "/put" && request.method === "POST") {
-          const rawBody = await safeParseJson(request);
-          if (typeof rawBody !== "object" || rawBody === null) {
-            return createErrorResponse("Invalid JSON body");
-          }
-          const body = rawBody as Record<string, unknown>;
-          if (typeof body.key !== "string" || !body.key) {
-            return createErrorResponse("Missing or invalid key in body");
-          }
-          await this.adminPut(body.key, body.value);
-          return Response.json({ success: true });
-        }
-
-        // Freeze instance (set read-only)
-        if (operation === "/freeze" && request.method === "PUT") {
-          return Response.json(await this.adminFreeze());
-        }
-
-        // Unfreeze instance (remove read-only)
-        if (operation === "/freeze" && request.method === "DELETE") {
-          return Response.json(await this.adminUnfreeze());
-        }
-
-        // Get freeze status
-        if (operation === "/freeze" && request.method === "GET") {
-          return Response.json(await this.adminGetFreezeStatus());
-        }
-
-        // Delete value
-        if (operation === "/delete" && request.method === "POST") {
-          const rawBody = await safeParseJson(request);
-          if (typeof rawBody !== "object" || rawBody === null) {
-            return createErrorResponse("Invalid JSON body");
-          }
-          const body = rawBody as Record<string, unknown>;
-          if (typeof body.key !== "string" || !body.key) {
-            return createErrorResponse("Missing or invalid key in body");
-          }
-          await this.adminDelete(body.key);
-          return Response.json({ success: true });
-        }
-
-        // Execute SQL (SQLite backend only)
-        if (operation === "/sql" && request.method === "POST") {
-          const rawBody = await safeParseJson(request);
-          if (typeof rawBody !== "object" || rawBody === null) {
-            return createErrorResponse("Invalid JSON body");
-          }
-          const body = rawBody as Record<string, unknown>;
-          if (typeof body.query !== "string" || !body.query) {
-            return createErrorResponse("Missing or invalid query in body");
-          }
-          return Response.json(this.adminSql(body.query));
-        }
-
-        // Get alarm
-        if (operation === "/alarm" && request.method === "GET") {
-          return Response.json(await this.adminGetAlarm());
-        }
-
-        // Set alarm
-        if (operation === "/alarm" && request.method === "PUT") {
-          const rawBody = await safeParseJson(request);
-          if (typeof rawBody !== "object" || rawBody === null) {
-            return createErrorResponse("Invalid JSON body");
-          }
-          const body = rawBody as Record<string, unknown>;
-          if (typeof body.timestamp !== "number") {
-            return createErrorResponse("Missing or invalid timestamp");
-          }
-          await this.adminSetAlarm(body.timestamp);
-          return Response.json({ success: true, alarm: body.timestamp });
-        }
-
-        // Delete alarm
-        if (operation === "/alarm" && request.method === "DELETE") {
-          await this.adminDeleteAlarm();
-          return Response.json({ success: true });
-        }
-
-        // Export all data
-        if (operation === "/export" && request.method === "GET") {
-          return Response.json(await this.adminExport());
-        }
-
-        // Import data
-        if (operation === "/import" && request.method === "POST") {
-          const rawBody = await safeParseJson(request);
-          if (typeof rawBody !== "object" || rawBody === null) {
-            return createErrorResponse("Invalid JSON body");
-          }
-          const body = rawBody as Record<string, unknown>;
-          if (
-            body.data === null ||
-            body.data === undefined ||
-            typeof body.data !== "object"
-          ) {
-            return createErrorResponse("Missing or invalid data object");
-          }
-          await this.adminImport(body.data as Record<string, unknown>);
-          return Response.json({
-            success: true,
-            imported: Object.keys(body.data).length,
+        return await match([operation, request.method])
+          .with(["/list", "GET"], async () => {
+            return Response.json(await this.adminList());
+          })
+          .with(["/get", "GET"], async () => {
+            const key = url.searchParams.get("key");
+            if (!key) return createErrorResponse("Missing key parameter");
+            return Response.json(await this.adminGet(key));
+          })
+          .with(["/put", "POST"], async () => {
+            const rawBody = await safeParseJson(request);
+            const parsed = PutPayloadSchema.safeParse(rawBody);
+            if (!parsed.success) return createErrorResponse("Invalid or missing key/value in body");
+            await this.adminPut(parsed.data.key, parsed.data.value);
+            return Response.json({ success: true });
+          })
+          .with(["/freeze", "PUT"], async () => {
+            return Response.json(await this.adminFreeze());
+          })
+          .with(["/freeze", "DELETE"], async () => {
+            return Response.json(await this.adminUnfreeze());
+          })
+          .with(["/freeze", "GET"], async () => {
+            return Response.json(await this.adminGetFreezeStatus());
+          })
+          .with(["/delete", "POST"], async () => {
+            const rawBody = await safeParseJson(request);
+            const parsed = DeletePayloadSchema.safeParse(rawBody);
+            if (!parsed.success) return createErrorResponse("Invalid or missing key in body");
+            await this.adminDelete(parsed.data.key);
+            return Response.json({ success: true });
+          })
+          .with(["/sql", "POST"], async () => {
+            const rawBody = await safeParseJson(request);
+            const parsed = SqlPayloadSchema.safeParse(rawBody);
+            if (!parsed.success) return createErrorResponse("Invalid or missing query in body");
+            return Response.json(this.adminSql(parsed.data.query));
+          })
+          .with(["/alarm", "GET"], async () => {
+            return Response.json(await this.adminGetAlarm());
+          })
+          .with(["/alarm", "PUT"], async () => {
+            const rawBody = await safeParseJson(request);
+            const parsed = AlarmPayloadSchema.safeParse(rawBody);
+            if (!parsed.success) return createErrorResponse("Invalid or missing timestamp in body");
+            await this.adminSetAlarm(parsed.data.timestamp);
+            return Response.json({ success: true, alarm: parsed.data.timestamp });
+          })
+          .with(["/alarm", "DELETE"], async () => {
+            await this.adminDeleteAlarm();
+            return Response.json({ success: true });
+          })
+          .with(["/export", "GET"], async () => {
+            return Response.json(await this.adminExport());
+          })
+          .with(["/import", "POST"], async () => {
+            const rawBody = await safeParseJson(request);
+            const parsed = ImportPayloadSchema.safeParse(rawBody);
+            if (!parsed.success) return createErrorResponse("Invalid data object");
+            await this.adminImport(parsed.data.data);
+            return Response.json({ success: true, imported: Object.keys(parsed.data.data).length });
+          })
+          .otherwise(() => {
+            return createErrorResponse("Unknown admin endpoint", HTTP_STATUS.NOT_FOUND);
           });
-        }
-
-        // Unknown admin route
-        return createErrorResponse("Unknown admin endpoint", 404);
       } catch (error) {
-        const message =
-          error instanceof Error ? error.message : "Unknown error";
-        return createErrorResponse(message, 500);
+        const message = error instanceof Error ? error.message : "Unknown error";
+        return createErrorResponse(message, HTTP_STATUS.INTERNAL_SERVER_ERROR);
       }
     }
 

@@ -46,16 +46,18 @@
   "bugs": {
     "url": "https://github.com/neverinfamous/do-manager-admin-hooks/issues"
   },
+  "dependencies": {
+    "ts-pattern": "^5.9.0",
+    "zod": "^4.4.3"
+  },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260708.1",
     "@eslint/js": "^10.0.1",
     "eslint": "^10.6.0",
     "globals": "^17.7.0",
-    "ts-pattern": "^5.9.0",
     "tsup": "^8.5.1",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.63.0",
-    "zod": "^4.4.3"
+    "typescript-eslint": "^8.63.0"
   },
   "peerDependencies": {
     "@cloudflare/workers-types": ">=4.0.0"
