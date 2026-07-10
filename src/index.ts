@@ -84,7 +84,7 @@ function parseQueryParams(url: URL): ReturnType<typeof QuerySchema.safeParse> {
 /**
  * Query used to list all user-created tables in SQLite backend
  */
-const SQLITE_INTROSPECTION_QUERY = "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%'";
+const SQLITE_INTROSPECTION_QUERY = "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' ORDER BY name";
 
 /**
  * Type guard for SQLite storage backend
@@ -120,6 +120,11 @@ const FROZEN_AT_STORAGE_KEY = "__do_manager_frozen_at";
  * Default limit for list and export operations
  */
 const DEFAULT_LIST_LIMIT = 1000;
+
+/**
+ * Cloudflare Durable Objects limit put() to 128 keys per operation
+ */
+const BATCH_SIZE = 128;
 
 /**
  * Admin hook response types
@@ -357,6 +362,7 @@ export function withAdminHooks<Env = unknown>(
             return Response.json({ success: true });
           })
           .with(["/sql", "POST"], async () => {
+            await this.ensureNotFrozen();
             const rawBody = await safeParseJson(request);
             const parsed = SqlPayloadSchema.safeParse(rawBody);
             if (!parsed.success) return createErrorResponse("Invalid or missing query in body");
@@ -418,8 +424,17 @@ export function withAdminHooks<Env = unknown>(
     async adminList(limit = DEFAULT_LIST_LIMIT, cursor?: string): Promise<AdminListResponse> {
       // Check for SQLite backend
       if (hasSqlBackend(this.state.storage)) {
-        const result = this.state.storage.sql.exec<{ name: string }>(SQLITE_INTROSPECTION_QUERY);
-        return { tables: result.toArray().map((row) => row.name) };
+        const parsedOffset = cursor ? parseInt(cursor, 10) : 0;
+        const offset = isNaN(parsedOffset) ? 0 : parsedOffset;
+        const safeLimit = Math.min(Math.max(1, limit), 5000);
+        
+        const result = this.state.storage.sql.exec<{ name: string }>(
+          `${SQLITE_INTROSPECTION_QUERY} LIMIT ${safeLimit} OFFSET ${offset}`
+        );
+        const tables = result.toArray().map((row) => row.name);
+        const nextCursor = tables.length === safeLimit ? (offset + safeLimit).toString() : undefined;
+        
+        return { tables, cursor: nextCursor };
       }
 
       // KV backend
@@ -489,6 +504,7 @@ export function withAdminHooks<Env = unknown>(
      * Set alarm
      */
     async adminSetAlarm(timestamp: number): Promise<void> {
+      await this.ensureNotFrozen();
       await this.state.storage.setAlarm(timestamp);
     }
 
@@ -496,6 +512,7 @@ export function withAdminHooks<Env = unknown>(
      * Delete alarm
      */
     async adminDeleteAlarm(): Promise<void> {
+      await this.ensureNotFrozen();
       await this.state.storage.deleteAlarm();
     }
 
@@ -533,8 +550,6 @@ export function withAdminHooks<Env = unknown>(
       await this.ensureNotFrozen();
       
       const entries = Object.entries(data);
-      // Cloudflare Durable Objects limit put() to 128 keys per operation
-      const BATCH_SIZE = 128;
       
       for (let i = 0; i < entries.length; i += BATCH_SIZE) {
         const chunk = Object.fromEntries(entries.slice(i, i + BATCH_SIZE));
