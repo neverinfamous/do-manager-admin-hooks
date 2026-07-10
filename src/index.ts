@@ -20,6 +20,8 @@ import type {
  * ```
  */
 
+const ALGO_SHA256 = 'SHA-256' as const;
+
 /**
  * Timing-safe string comparison to prevent timing attacks.
  * Hashes both strings via Web Crypto before comparing to prevent length-leaking.
@@ -27,8 +29,8 @@ import type {
 async function timingSafeEqual(a: string, b: string): Promise<boolean> {
   const encoder = new TextEncoder();
   
-  const hashA = await crypto.subtle.digest('SHA-256', encoder.encode(a));
-  const hashB = await crypto.subtle.digest('SHA-256', encoder.encode(b));
+  const hashA = await crypto.subtle.digest(ALGO_SHA256, encoder.encode(a));
+  const hashB = await crypto.subtle.digest(ALGO_SHA256, encoder.encode(b));
   
   const arrayA = new Uint8Array(hashA);
   const arrayB = new Uint8Array(hashB);
@@ -86,6 +88,10 @@ const ImportPayloadSchema = z.object({
 const QuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(MAX_LIST_LIMIT).optional(),
   cursor: z.string().optional(),
+});
+
+const GetQuerySchema = z.object({
+  key: z.string().min(1, 'Key cannot be empty'),
 });
 
 /**
@@ -364,8 +370,9 @@ export function withAdminHooks<Env = unknown>(
           })
           .with(["/get", "GET"], async () => {
             const key = url.searchParams.get("key");
-            if (!key) return createErrorResponse("Missing key parameter");
-            return Response.json(await this.adminGet(key));
+            const parsed = GetQuerySchema.safeParse({ key });
+            if (!parsed.success) return createErrorResponse("Missing or invalid key parameter");
+            return Response.json(await this.adminGet(parsed.data.key));
           })
           .with(["/put", "POST"], async () => {
             const body = await parseBody(request, PutPayloadSchema, "Invalid or missing key/value in body");
@@ -459,7 +466,7 @@ export function withAdminHooks<Env = unknown>(
       if (hasSqlBackend(this.state.storage)) {
         const offset = cursor ? Number(cursor) : 0;
         if (!Number.isInteger(offset) || offset < 0) {
-          throw new Error("Invalid cursor format for SQLite backend");
+          throw new AdminError("Invalid cursor format for SQLite backend", HTTP_STATUS.BAD_REQUEST);
         }
         
         const safeLimit = Math.min(Math.max(1, limit), MAX_LIST_LIMIT);
@@ -518,14 +525,19 @@ export function withAdminHooks<Env = unknown>(
         throw new AdminError("SQL not available - this DO uses KV storage backend", HTTP_STATUS.BAD_REQUEST);
       }
 
-      const result = this.state.storage.sql.exec(query);
-      const rows = result.toArray();
+      try {
+        const result = this.state.storage.sql.exec(query);
+        const rows = result.toArray();
 
-      return {
-        result: rows,
-        rowCount: rows.length,
-        columns: result.columnNames,
-      };
+        return {
+          result: rows,
+          rowCount: rows.length,
+          columns: result.columnNames,
+        };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "SQL execution failed";
+        throw new AdminError(message, HTTP_STATUS.BAD_REQUEST);
+      }
     }
 
     /**
