@@ -151,11 +151,18 @@ function parseQueryParams(url: URL): ReturnType<typeof QuerySchema.safeParse> {
 const SQLITE_INTROSPECTION_QUERY = `SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' AND name != '${INTERNAL_SYSTEM_TABLE}' ORDER BY name`;
 
 /**
+ * Type representing the SQLite storage backend interface
+ */
+export interface SqlStorageBackend {
+  exec: <T = unknown>(query: string) => { toArray: () => T[], columnNames: string[] };
+}
+
+/**
  * Type guard for SQLite storage backend
  */
 function hasSqlBackend(
   storage: unknown,
-): storage is { sql: { exec: <T = unknown>(query: string) => { toArray: () => T[], columnNames: string[] } } } {
+): storage is { sql: SqlStorageBackend } {
   return (
     typeof storage === "object" &&
     storage !== null &&
@@ -368,6 +375,13 @@ export function withAdminHooks<Env = unknown>(
     }
 
     /**
+     * Helper to safely access the SQL backend if available
+     */
+    private getSql(): SqlStorageBackend | undefined {
+      return hasSqlBackend(this.state.storage) ? this.state.storage.sql : undefined;
+    }
+
+    /**
      * Handle admin requests. Call this at the start of your fetch handler.
      * Returns a Response if the request was an admin request, or null if not.
      */
@@ -476,9 +490,10 @@ export function withAdminHooks<Env = unknown>(
      * Internal helper to get freeze state across both KV and SQL backends.
      */
     async getFreezeState(): Promise<{ isFrozen: boolean; frozenAt?: string }> {
-      if (hasSqlBackend(this.state.storage)) {
+      const sql = this.getSql();
+      if (sql) {
         try {
-          const result = this.state.storage.sql.exec(
+          const result = sql.exec(
             `SELECT key, value FROM ${INTERNAL_SYSTEM_TABLE} WHERE key IN ('${FROZEN_STORAGE_KEY}', '${FROZEN_AT_STORAGE_KEY}')`
           );
           const rows = z.array(SqlFreezeRowSchema).parse(result.toArray());
@@ -495,7 +510,7 @@ export function withAdminHooks<Env = unknown>(
         const isFrozenRaw = await this.state.storage.get(FROZEN_STORAGE_KEY);
         const frozenAtRaw = await this.state.storage.get(FROZEN_AT_STORAGE_KEY);
         
-        const isFrozen = z.boolean().optional().catch(false).parse(isFrozenRaw);
+        const isFrozen = z.union([z.boolean(), z.string()]).transform(v => v === true || v === FROZEN_TRUE_VALUE).optional().catch(false).parse(isFrozenRaw);
         const frozenAt = z.string().optional().catch(undefined).parse(frozenAtRaw);
         
         return { isFrozen: !!isFrozen, frozenAt };
@@ -506,18 +521,19 @@ export function withAdminHooks<Env = unknown>(
      * Internal helper to set freeze state across both KV and SQL backends.
      */
     async setFreezeState(frozen: boolean): Promise<string | undefined> {
-      if (hasSqlBackend(this.state.storage)) {
-        this.state.storage.sql.exec(
+      const sql = this.getSql();
+      if (sql) {
+        sql.exec(
           `CREATE TABLE IF NOT EXISTS ${INTERNAL_SYSTEM_TABLE} (key TEXT PRIMARY KEY, value TEXT)`
         );
         if (frozen) {
           const frozenAt = new Date().toISOString();
-          this.state.storage.sql.exec(
+          sql.exec(
             `INSERT OR REPLACE INTO ${INTERNAL_SYSTEM_TABLE} (key, value) VALUES ('${FROZEN_STORAGE_KEY}', '${FROZEN_TRUE_VALUE}'), ('${FROZEN_AT_STORAGE_KEY}', '${frozenAt}')`
           );
           return frozenAt;
         } else {
-          this.state.storage.sql.exec(
+          sql.exec(
             `DELETE FROM ${INTERNAL_SYSTEM_TABLE} WHERE key IN ('${FROZEN_STORAGE_KEY}', '${FROZEN_AT_STORAGE_KEY}')`
           );
           return undefined;
@@ -525,7 +541,7 @@ export function withAdminHooks<Env = unknown>(
       } else {
         if (frozen) {
           const frozenAt = new Date().toISOString();
-          await this.state.storage.put(FROZEN_STORAGE_KEY, true);
+          await this.state.storage.put(FROZEN_STORAGE_KEY, FROZEN_TRUE_VALUE);
           await this.state.storage.put(FROZEN_AT_STORAGE_KEY, frozenAt);
           return frozenAt;
         } else {
@@ -540,7 +556,7 @@ export function withAdminHooks<Env = unknown>(
      * Helper to enforce KV backend is available
      */
     ensureKvBackend(): void {
-      if (hasSqlBackend(this.state.storage)) {
+      if (this.getSql()) {
         throw new AdminError(ERROR_MESSAGES.KV_NOT_AVAILABLE, HTTP_STATUS.BAD_REQUEST);
       }
     }
@@ -576,13 +592,14 @@ export function withAdminHooks<Env = unknown>(
      */
     async adminList(limit = DEFAULT_LIST_LIMIT, cursor?: string): Promise<AdminListResponse> {
       // Check for SQLite backend
-      if (hasSqlBackend(this.state.storage)) {
+      const sql = this.getSql();
+      if (sql) {
         const offset = cursor ? Number(cursor) : 0;
         if (!Number.isSafeInteger(offset) || offset < 0) {
           throw new AdminError(ERROR_MESSAGES.SQLITE_CURSOR, HTTP_STATUS.BAD_REQUEST);
         }
         
-        const result = this.state.storage.sql.exec(
+        const result = sql.exec(
           `${SQLITE_INTROSPECTION_QUERY} LIMIT ${limit} OFFSET ${offset}`
         );
         const tables = z.array(SqlTableSchema).parse(result.toArray()).map((row) => row.name);
@@ -637,12 +654,17 @@ export function withAdminHooks<Env = unknown>(
     async adminSql(query: string): Promise<AdminSqlResponse> {
       await this.ensureNotFrozen();
 
-      if (!hasSqlBackend(this.state.storage)) {
+      const sql = this.getSql();
+      if (!sql) {
         throw new AdminError(ERROR_MESSAGES.SQL_NOT_AVAILABLE, HTTP_STATUS.BAD_REQUEST);
       }
 
+      if (query.includes(INTERNAL_SYSTEM_TABLE)) {
+        throw new AdminError(ERROR_MESSAGES.SYSTEM_KEY_MODIFICATION, HTTP_STATUS.BAD_REQUEST);
+      }
+
       try {
-        const result = this.state.storage.sql.exec(query);
+        const result = sql.exec(query);
         const rows = result.toArray();
 
         return {
