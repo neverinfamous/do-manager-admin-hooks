@@ -61,13 +61,5 @@
   },
   "peerDependencies": {
     "@cloudflare/workers-types": ">=4.0.0"
-  },
-  "pnpm.overrides": {
-    "minimatch": ">=10.2.4",
-    "flatted": "3.4.2",
-    "picomatch": "4.0.4",
-    "brace-expansion": "5.0.5",
-    "tsup>esbuild": ">=0.28.1",
-    "esbuild": ">=0.28.1"
   }
 }
