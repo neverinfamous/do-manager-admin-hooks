@@ -126,6 +126,15 @@ const GetQuerySchema = z.object({
   key: z.string().min(1, 'Key cannot be empty'),
 });
 
+const SqlFreezeRowSchema = z.object({
+  key: z.string(),
+  value: z.string(),
+});
+
+const SqlTableSchema = z.object({
+  name: z.string(),
+});
+
 /**
  * Safely parse list/export query parameters from URL
  */
@@ -469,10 +478,10 @@ export function withAdminHooks<Env = unknown>(
     async getFreezeState(): Promise<{ isFrozen: boolean; frozenAt?: string }> {
       if (hasSqlBackend(this.state.storage)) {
         try {
-          const result = this.state.storage.sql.exec<{ key: string, value: string }>(
+          const result = this.state.storage.sql.exec(
             `SELECT key, value FROM ${INTERNAL_SYSTEM_TABLE} WHERE key IN ('${FROZEN_STORAGE_KEY}', '${FROZEN_AT_STORAGE_KEY}')`
           );
-          const rows = result.toArray();
+          const rows = z.array(SqlFreezeRowSchema).parse(result.toArray());
           const isFrozenRow = rows.find(r => r.key === FROZEN_STORAGE_KEY);
           if (isFrozenRow?.value === FROZEN_TRUE_VALUE) {
             const timeRow = rows.find(r => r.key === FROZEN_AT_STORAGE_KEY);
@@ -573,10 +582,10 @@ export function withAdminHooks<Env = unknown>(
           throw new AdminError(ERROR_MESSAGES.SQLITE_CURSOR, HTTP_STATUS.BAD_REQUEST);
         }
         
-        const result = this.state.storage.sql.exec<{ name: string }>(
+        const result = this.state.storage.sql.exec(
           `${SQLITE_INTROSPECTION_QUERY} LIMIT ${limit} OFFSET ${offset}`
         );
-        const tables = result.toArray().map((row) => row.name);
+        const tables = z.array(SqlTableSchema).parse(result.toArray()).map((row) => row.name);
         const nextCursor = tables.length === limit ? (offset + limit).toString() : undefined;
         
         return { tables, cursor: nextCursor };
