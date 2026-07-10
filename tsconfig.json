@@ -12,8 +12,7 @@
     "declarationMap": true,
     "outDir": "./dist",
     "rootDir": "./src",
-    "types": ["@cloudflare/workers-types"],
-    "ignoreDeprecations": "6.0"
+    "types": ["@cloudflare/workers-types"]
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]
