@@ -23,6 +23,14 @@ import type {
 const ALGO_SHA256 = 'SHA-256' as const;
 const ADMIN_KEY_HEADER = "X-Admin-Key";
 const INTERNAL_SYSTEM_TABLE = "_do_manager_system";
+const FROZEN_TRUE_VALUE = "true";
+
+export const HTTP_METHOD = {
+  GET: "GET",
+  POST: "POST",
+  PUT: "PUT",
+  DELETE: "DELETE"
+} as const;
 
 export const ERROR_MESSAGES = {
   UNAUTHORIZED: "Unauthorized",
@@ -131,7 +139,7 @@ function parseQueryParams(url: URL): ReturnType<typeof QuerySchema.safeParse> {
 /**
  * Query used to list all user-created tables in SQLite backend
  */
-const SQLITE_INTROSPECTION_QUERY = "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' ORDER BY name";
+const SQLITE_INTROSPECTION_QUERY = `SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' AND name != '${INTERNAL_SYSTEM_TABLE}' ORDER BY name`;
 
 /**
  * Type guard for SQLite storage backend
@@ -387,58 +395,58 @@ export function withAdminHooks<Env = unknown>(
 
       try {
         return await match([operation, request.method])
-          .with(["/list", "GET"], async () => {
+          .with(["/list", HTTP_METHOD.GET], async () => {
             const parsed = parseQueryParams(url);
             if (!parsed.success) return createErrorResponse(ERROR_MESSAGES.INVALID_LIMIT_CURSOR);
             return Response.json(await this.adminList(parsed.data.limit, parsed.data.cursor));
           })
-          .with(["/get", "GET"], async () => {
+          .with(["/get", HTTP_METHOD.GET], async () => {
             const key = url.searchParams.get("key");
             const parsed = GetQuerySchema.safeParse({ key });
             if (!parsed.success) return createErrorResponse(ERROR_MESSAGES.MISSING_KEY);
             return Response.json(await this.adminGet(parsed.data.key));
           })
-          .with(["/put", "POST"], async () => {
+          .with(["/put", HTTP_METHOD.POST], async () => {
             const body = await parseBody(request, PutPayloadSchema, ERROR_MESSAGES.INVALID_PUT_BODY);
             await this.adminPut(body.key, body.value);
             return Response.json({ success: true });
           })
-          .with(["/freeze", "PUT"], async () => {
+          .with(["/freeze", HTTP_METHOD.PUT], async () => {
             return Response.json(await this.adminFreeze());
           })
-          .with(["/freeze", "DELETE"], async () => {
+          .with(["/freeze", HTTP_METHOD.DELETE], async () => {
             return Response.json(await this.adminUnfreeze());
           })
-          .with(["/freeze", "GET"], async () => {
+          .with(["/freeze", HTTP_METHOD.GET], async () => {
             return Response.json(await this.adminGetFreezeStatus());
           })
-          .with(["/delete", "POST"], async () => {
+          .with(["/delete", HTTP_METHOD.POST], async () => {
             const body = await parseBody(request, DeletePayloadSchema, ERROR_MESSAGES.INVALID_DELETE_BODY);
             await this.adminDelete(body.key);
             return Response.json({ success: true });
           })
-          .with(["/sql", "POST"], async () => {
+          .with(["/sql", HTTP_METHOD.POST], async () => {
             const body = await parseBody(request, SqlPayloadSchema, ERROR_MESSAGES.INVALID_SQL_BODY);
             return Response.json(await this.adminSql(body.query));
           })
-          .with(["/alarm", "GET"], async () => {
+          .with(["/alarm", HTTP_METHOD.GET], async () => {
             return Response.json(await this.adminGetAlarm());
           })
-          .with(["/alarm", "PUT"], async () => {
+          .with(["/alarm", HTTP_METHOD.PUT], async () => {
             const body = await parseBody(request, AlarmPayloadSchema, ERROR_MESSAGES.INVALID_ALARM_BODY);
             await this.adminSetAlarm(body.timestamp);
             return Response.json({ success: true, alarm: body.timestamp });
           })
-          .with(["/alarm", "DELETE"], async () => {
+          .with(["/alarm", HTTP_METHOD.DELETE], async () => {
             await this.adminDeleteAlarm();
             return Response.json({ success: true });
           })
-          .with(["/export", "GET"], async () => {
+          .with(["/export", HTTP_METHOD.GET], async () => {
             const parsed = parseQueryParams(url);
             if (!parsed.success) return createErrorResponse(ERROR_MESSAGES.INVALID_LIMIT_CURSOR);
             return Response.json(await this.adminExport(parsed.data.limit, parsed.data.cursor));
           })
-          .with(["/import", "POST"], async () => {
+          .with(["/import", HTTP_METHOD.POST], async () => {
             const body = await parseBody(request, ImportPayloadSchema, ERROR_MESSAGES.INVALID_IMPORT_BODY);
             await this.adminImport(body.data);
             return Response.json({ success: true, imported: Object.keys(body.data).length });
@@ -466,7 +474,7 @@ export function withAdminHooks<Env = unknown>(
           );
           const rows = result.toArray();
           const isFrozenRow = rows.find(r => r.key === FROZEN_STORAGE_KEY);
-          if (isFrozenRow?.value === 'true') {
+          if (isFrozenRow?.value === FROZEN_TRUE_VALUE) {
             const timeRow = rows.find(r => r.key === FROZEN_AT_STORAGE_KEY);
             return { isFrozen: true, frozenAt: timeRow?.value };
           }
@@ -496,7 +504,7 @@ export function withAdminHooks<Env = unknown>(
         if (frozen) {
           const frozenAt = new Date().toISOString();
           this.state.storage.sql.exec(
-            `INSERT OR REPLACE INTO ${INTERNAL_SYSTEM_TABLE} (key, value) VALUES ('${FROZEN_STORAGE_KEY}', 'true'), ('${FROZEN_AT_STORAGE_KEY}', '${frozenAt}')`
+            `INSERT OR REPLACE INTO ${INTERNAL_SYSTEM_TABLE} (key, value) VALUES ('${FROZEN_STORAGE_KEY}', '${FROZEN_TRUE_VALUE}'), ('${FROZEN_AT_STORAGE_KEY}', '${frozenAt}')`
           );
           return frozenAt;
         } else {
