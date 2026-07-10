@@ -81,29 +81,7 @@ function timingSafeEqual(a: string, b: string): boolean {
   return result === 0;
 }
 
-/**
- * Admin hook request body types
- */
-interface AdminPutBody {
-  key: string;
-  value: unknown;
-}
 
-interface AdminDeleteBody {
-  key: string;
-}
-
-interface AdminSqlBody {
-  query: string;
-}
-
-interface AdminAlarmBody {
-  timestamp: number;
-}
-
-interface AdminImportBody {
-  data: Record<string, unknown>;
-}
 
 /**
  * Special storage key used to mark an instance as frozen (read-only)
@@ -204,6 +182,27 @@ export interface AdminHooksOptions {
 }
 
 /**
+ * Utility to create a standardized JSON error response
+ */
+function createErrorResponse(message: string, status = 400): Response {
+  return new Response(JSON.stringify({ error: message }), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+/**
+ * Safely parse JSON from a request body, returning null if invalid or empty
+ */
+async function safeParseJson(request: Request): Promise<unknown> {
+  try {
+    return await request.json();
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Creates a Durable Object base class with admin hooks for DO Manager integration.
  *
  * @param options - Configuration options for admin hooks
@@ -272,10 +271,7 @@ export function withAdminHooks(
           providedKey.length !== expectedKey.length ||
           !timingSafeEqual(providedKey, expectedKey)
         ) {
-          return new Response(JSON.stringify({ error: "Unauthorized" }), {
-            status: 401,
-            headers: { "Content-Type": "application/json" },
-          });
+          return createErrorResponse("Unauthorized", 401);
         }
       }
 
@@ -297,28 +293,20 @@ export function withAdminHooks(
         if (operation === "/get" && request.method === "GET") {
           const key = url.searchParams.get("key");
           if (!key) {
-            return new Response(
-              JSON.stringify({ error: "Missing key parameter" }),
-              {
-                status: 400,
-                headers: { "Content-Type": "application/json" },
-              },
-            );
+            return createErrorResponse("Missing key parameter");
           }
           return Response.json(await this.adminGet(key));
         }
 
         // Put value
         if (operation === "/put" && request.method === "POST") {
-          const body = (await request.json()) as AdminPutBody;
-          if (!body.key) {
-            return new Response(
-              JSON.stringify({ error: "Missing key in body" }),
-              {
-                status: 400,
-                headers: { "Content-Type": "application/json" },
-              },
-            );
+          const rawBody = await safeParseJson(request);
+          if (typeof rawBody !== "object" || rawBody === null) {
+            return createErrorResponse("Invalid JSON body");
+          }
+          const body = rawBody as Record<string, unknown>;
+          if (typeof body.key !== "string" || !body.key) {
+            return createErrorResponse("Missing or invalid key in body");
           }
           await this.adminPut(body.key, body.value);
           return Response.json({ success: true });
@@ -341,15 +329,13 @@ export function withAdminHooks(
 
         // Delete value
         if (operation === "/delete" && request.method === "POST") {
-          const body = (await request.json()) as AdminDeleteBody;
-          if (!body.key) {
-            return new Response(
-              JSON.stringify({ error: "Missing key in body" }),
-              {
-                status: 400,
-                headers: { "Content-Type": "application/json" },
-              },
-            );
+          const rawBody = await safeParseJson(request);
+          if (typeof rawBody !== "object" || rawBody === null) {
+            return createErrorResponse("Invalid JSON body");
+          }
+          const body = rawBody as Record<string, unknown>;
+          if (typeof body.key !== "string" || !body.key) {
+            return createErrorResponse("Missing or invalid key in body");
           }
           await this.adminDelete(body.key);
           return Response.json({ success: true });
@@ -357,15 +343,13 @@ export function withAdminHooks(
 
         // Execute SQL (SQLite backend only)
         if (operation === "/sql" && request.method === "POST") {
-          const body = (await request.json()) as AdminSqlBody;
-          if (!body.query) {
-            return new Response(
-              JSON.stringify({ error: "Missing query in body" }),
-              {
-                status: 400,
-                headers: { "Content-Type": "application/json" },
-              },
-            );
+          const rawBody = await safeParseJson(request);
+          if (typeof rawBody !== "object" || rawBody === null) {
+            return createErrorResponse("Invalid JSON body");
+          }
+          const body = rawBody as Record<string, unknown>;
+          if (typeof body.query !== "string" || !body.query) {
+            return createErrorResponse("Missing or invalid query in body");
           }
           return Response.json(this.adminSql(body.query));
         }
@@ -377,15 +361,13 @@ export function withAdminHooks(
 
         // Set alarm
         if (operation === "/alarm" && request.method === "PUT") {
-          const body = (await request.json()) as AdminAlarmBody;
+          const rawBody = await safeParseJson(request);
+          if (typeof rawBody !== "object" || rawBody === null) {
+            return createErrorResponse("Invalid JSON body");
+          }
+          const body = rawBody as Record<string, unknown>;
           if (typeof body.timestamp !== "number") {
-            return new Response(
-              JSON.stringify({ error: "Missing or invalid timestamp" }),
-              {
-                status: 400,
-                headers: { "Content-Type": "application/json" },
-              },
-            );
+            return createErrorResponse("Missing or invalid timestamp");
           }
           await this.adminSetAlarm(body.timestamp);
           return Response.json({ success: true, alarm: body.timestamp });
@@ -404,21 +386,19 @@ export function withAdminHooks(
 
         // Import data
         if (operation === "/import" && request.method === "POST") {
-          const body = (await request.json()) as AdminImportBody;
+          const rawBody = await safeParseJson(request);
+          if (typeof rawBody !== "object" || rawBody === null) {
+            return createErrorResponse("Invalid JSON body");
+          }
+          const body = rawBody as Record<string, unknown>;
           if (
             body.data === null ||
             body.data === undefined ||
             typeof body.data !== "object"
           ) {
-            return new Response(
-              JSON.stringify({ error: "Missing or invalid data object" }),
-              {
-                status: 400,
-                headers: { "Content-Type": "application/json" },
-              },
-            );
+            return createErrorResponse("Missing or invalid data object");
           }
-          await this.adminImport(body.data);
+          await this.adminImport(body.data as Record<string, unknown>);
           return Response.json({
             success: true,
             imported: Object.keys(body.data).length,
@@ -426,20 +406,11 @@ export function withAdminHooks(
         }
 
         // Unknown admin route
-        return new Response(
-          JSON.stringify({ error: "Unknown admin endpoint" }),
-          {
-            status: 404,
-            headers: { "Content-Type": "application/json" },
-          },
-        );
+        return createErrorResponse("Unknown admin endpoint", 404);
       } catch (error) {
         const message =
           error instanceof Error ? error.message : "Unknown error";
-        return new Response(JSON.stringify({ error: message }), {
-          status: 500,
-          headers: { "Content-Type": "application/json" },
-        });
+        return createErrorResponse(message, 500);
       }
     }
 
