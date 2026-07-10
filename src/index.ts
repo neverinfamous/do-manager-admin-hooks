@@ -22,6 +22,26 @@ import type {
 
 const ALGO_SHA256 = 'SHA-256' as const;
 
+export const ERROR_MESSAGES = {
+  UNAUTHORIZED: "Unauthorized",
+  MISSING_ADMIN_KEY: "Server misconfiguration: adminKey is required when requireAuth is enabled",
+  INVALID_LIMIT_CURSOR: "Invalid limit or cursor",
+  MISSING_KEY: "Missing or invalid key parameter",
+  INVALID_PUT_BODY: "Invalid or missing key/value in body",
+  INVALID_DELETE_BODY: "Invalid or missing key in body",
+  INVALID_SQL_BODY: "Invalid or missing query in body",
+  INVALID_ALARM_BODY: "Invalid or missing timestamp in body",
+  INVALID_IMPORT_BODY: "Invalid data object",
+  UNKNOWN_ENDPOINT: "Unknown admin endpoint",
+  UNKNOWN_ERROR: "Unknown error",
+  FROZEN_INSTANCE: "Instance is frozen. Unfreeze before making changes.",
+  SYSTEM_KEY_MODIFICATION: "Cannot manually modify internal system keys",
+  SQL_NOT_AVAILABLE: "SQL not available - this DO uses KV storage backend",
+  SQL_FAILED: "SQL execution failed",
+  SQLITE_CURSOR: "Invalid cursor format for SQLite backend",
+  PAYLOAD_TOO_LARGE: "Payload too large. Maximum keys exceeded."
+} as const;
+
 /**
  * Timing-safe string comparison to prevent timing attacks.
  * Hashes both strings via Web Crypto before comparing to prevent length-leaking.
@@ -347,13 +367,13 @@ export function withAdminHooks<Env = unknown>(
 
         if (!expectedKey) {
           return createErrorResponse(
-            "Server misconfiguration: adminKey is required when requireAuth is enabled",
+            ERROR_MESSAGES.MISSING_ADMIN_KEY,
             HTTP_STATUS.INTERNAL_SERVER_ERROR,
           );
         }
 
         if (!(await timingSafeEqual(providedKey, expectedKey))) {
-          return createErrorResponse("Unauthorized", HTTP_STATUS.UNAUTHORIZED);
+          return createErrorResponse(ERROR_MESSAGES.UNAUTHORIZED, HTTP_STATUS.UNAUTHORIZED);
         }
       }
 
@@ -364,17 +384,17 @@ export function withAdminHooks<Env = unknown>(
         return await match([operation, request.method])
           .with(["/list", "GET"], async () => {
             const parsed = parseQueryParams(url);
-            if (!parsed.success) return createErrorResponse("Invalid limit or cursor");
+            if (!parsed.success) return createErrorResponse(ERROR_MESSAGES.INVALID_LIMIT_CURSOR);
             return Response.json(await this.adminList(parsed.data.limit, parsed.data.cursor));
           })
           .with(["/get", "GET"], async () => {
             const key = url.searchParams.get("key");
             const parsed = GetQuerySchema.safeParse({ key });
-            if (!parsed.success) return createErrorResponse("Missing or invalid key parameter");
+            if (!parsed.success) return createErrorResponse(ERROR_MESSAGES.MISSING_KEY);
             return Response.json(await this.adminGet(parsed.data.key));
           })
           .with(["/put", "POST"], async () => {
-            const body = await parseBody(request, PutPayloadSchema, "Invalid or missing key/value in body");
+            const body = await parseBody(request, PutPayloadSchema, ERROR_MESSAGES.INVALID_PUT_BODY);
             await this.adminPut(body.key, body.value);
             return Response.json({ success: true });
           })
@@ -388,19 +408,19 @@ export function withAdminHooks<Env = unknown>(
             return Response.json(await this.adminGetFreezeStatus());
           })
           .with(["/delete", "POST"], async () => {
-            const body = await parseBody(request, DeletePayloadSchema, "Invalid or missing key in body");
+            const body = await parseBody(request, DeletePayloadSchema, ERROR_MESSAGES.INVALID_DELETE_BODY);
             await this.adminDelete(body.key);
             return Response.json({ success: true });
           })
           .with(["/sql", "POST"], async () => {
-            const body = await parseBody(request, SqlPayloadSchema, "Invalid or missing query in body");
+            const body = await parseBody(request, SqlPayloadSchema, ERROR_MESSAGES.INVALID_SQL_BODY);
             return Response.json(await this.adminSql(body.query));
           })
           .with(["/alarm", "GET"], async () => {
             return Response.json(await this.adminGetAlarm());
           })
           .with(["/alarm", "PUT"], async () => {
-            const body = await parseBody(request, AlarmPayloadSchema, "Invalid or missing timestamp in body");
+            const body = await parseBody(request, AlarmPayloadSchema, ERROR_MESSAGES.INVALID_ALARM_BODY);
             await this.adminSetAlarm(body.timestamp);
             return Response.json({ success: true, alarm: body.timestamp });
           })
@@ -410,22 +430,22 @@ export function withAdminHooks<Env = unknown>(
           })
           .with(["/export", "GET"], async () => {
             const parsed = parseQueryParams(url);
-            if (!parsed.success) return createErrorResponse("Invalid limit or cursor");
+            if (!parsed.success) return createErrorResponse(ERROR_MESSAGES.INVALID_LIMIT_CURSOR);
             return Response.json(await this.adminExport(parsed.data.limit, parsed.data.cursor));
           })
           .with(["/import", "POST"], async () => {
-            const body = await parseBody(request, ImportPayloadSchema, "Invalid data object");
+            const body = await parseBody(request, ImportPayloadSchema, ERROR_MESSAGES.INVALID_IMPORT_BODY);
             await this.adminImport(body.data);
             return Response.json({ success: true, imported: Object.keys(body.data).length });
           })
           .otherwise(() => {
-            return createErrorResponse("Unknown admin endpoint", HTTP_STATUS.NOT_FOUND);
+            return createErrorResponse(ERROR_MESSAGES.UNKNOWN_ENDPOINT, HTTP_STATUS.NOT_FOUND);
           });
       } catch (error) {
         if (error instanceof AdminError) {
           return createErrorResponse(error.message, error.status);
         }
-        const message = error instanceof Error ? error.message : "Unknown error";
+        const message = error instanceof Error ? error.message : ERROR_MESSAGES.UNKNOWN_ERROR;
         return createErrorResponse(message, HTTP_STATUS.INTERNAL_SERVER_ERROR);
       }
     }
@@ -438,7 +458,7 @@ export function withAdminHooks<Env = unknown>(
       const isFrozen = await this.state.storage.get<boolean>(FROZEN_STORAGE_KEY);
       if (isFrozen) {
         throw new AdminError(
-          "Instance is frozen. Unfreeze before making changes.",
+          ERROR_MESSAGES.FROZEN_INSTANCE,
           HTTP_STATUS.BAD_REQUEST
         );
       }
@@ -450,7 +470,7 @@ export function withAdminHooks<Env = unknown>(
     validateKey(key: string): void {
       if (key.startsWith(SYSTEM_KEY_PREFIX)) {
         throw new AdminError(
-          "Cannot manually modify internal system keys",
+          ERROR_MESSAGES.SYSTEM_KEY_MODIFICATION,
           HTTP_STATUS.BAD_REQUEST
         );
       }
@@ -464,7 +484,7 @@ export function withAdminHooks<Env = unknown>(
       if (hasSqlBackend(this.state.storage)) {
         const offset = cursor ? Number(cursor) : 0;
         if (!Number.isSafeInteger(offset) || offset < 0) {
-          throw new AdminError("Invalid cursor format for SQLite backend", HTTP_STATUS.BAD_REQUEST);
+          throw new AdminError(ERROR_MESSAGES.SQLITE_CURSOR, HTTP_STATUS.BAD_REQUEST);
         }
         
         const safeLimit = Math.min(Math.max(1, limit), MAX_LIST_LIMIT);
@@ -522,7 +542,7 @@ export function withAdminHooks<Env = unknown>(
       await this.ensureNotFrozen();
 
       if (!hasSqlBackend(this.state.storage)) {
-        throw new AdminError("SQL not available - this DO uses KV storage backend", HTTP_STATUS.BAD_REQUEST);
+        throw new AdminError(ERROR_MESSAGES.SQL_NOT_AVAILABLE, HTTP_STATUS.BAD_REQUEST);
       }
 
       try {
@@ -535,7 +555,7 @@ export function withAdminHooks<Env = unknown>(
           columns: result.columnNames,
         };
       } catch (error) {
-        const message = error instanceof Error ? error.message : "SQL execution failed";
+        const message = error instanceof Error ? error.message : ERROR_MESSAGES.SQL_FAILED;
         throw new AdminError(message, HTTP_STATUS.BAD_REQUEST);
       }
     }
@@ -568,7 +588,8 @@ export function withAdminHooks<Env = unknown>(
      * Export all storage data
      */
     async adminExport(limit = DEFAULT_LIST_LIMIT, cursor?: string): Promise<AdminExportResponse> {
-      const options = buildListOptions(limit, cursor);
+      const safeLimit = Math.min(Math.max(1, limit), MAX_LIST_LIMIT);
+      const options = buildListOptions(safeLimit, cursor);
       const entries = await this.state.storage.list(options);
       const data: Record<string, unknown> = {};
 
@@ -596,6 +617,11 @@ export function withAdminHooks<Env = unknown>(
     async adminImport(data: Record<string, unknown>): Promise<void> {
       await this.ensureNotFrozen();
       
+      const keyCount = Object.keys(data).length;
+      if (keyCount > MAX_IMPORT_KEYS) {
+        throw new AdminError(ERROR_MESSAGES.PAYLOAD_TOO_LARGE, HTTP_STATUS.BAD_REQUEST);
+      }
+
       for (const key of Object.keys(data)) {
         this.validateKey(key);
       }
