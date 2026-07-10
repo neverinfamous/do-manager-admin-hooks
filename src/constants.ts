@@ -11,6 +11,27 @@ export const HTTP_METHOD = {
   DELETE: "DELETE"
 } as const;
 
+export const ROUTES = {
+  LIST: "/list",
+  GET: "/get",
+  PUT: "/put",
+  DELETE: "/delete",
+  SQL: "/sql",
+  ALARM: "/alarm",
+  EXPORT: "/export",
+  IMPORT: "/import",
+  FREEZE: "/freeze",
+} as const;
+
+export const DEFAULT_BASE_PATH = "/admin";
+
+export const CONTENT_TYPES = {
+  JSON: "application/json",
+  TEXT: "text/plain",
+} as const;
+
+export const SUCCESS_RESPONSE = { success: true } as const;
+
 export const ERROR_MESSAGES = {
   UNAUTHORIZED: "Unauthorized",
   MISSING_ADMIN_KEY: "Server misconfiguration: adminKey is required when requireAuth is enabled",

@@ -1,4 +1,4 @@
-import { HTTP_STATUS } from './constants';
+import { HTTP_STATUS, CONTENT_TYPES } from './constants';
 
 export class AdminError extends Error {
   constructor(
@@ -13,6 +13,6 @@ export class AdminError extends Error {
 export function createErrorResponse(message: string, status: number = HTTP_STATUS.BAD_REQUEST): Response {
   return new Response(JSON.stringify({ error: message }), {
     status,
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": CONTENT_TYPES.JSON },
   });
 }

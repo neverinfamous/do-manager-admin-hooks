@@ -12,7 +12,11 @@ import {
   FROZEN_TRUE_VALUE, 
   DEFAULT_LIST_LIMIT, 
   BATCH_SIZE, 
-  SQLITE_INTROSPECTION_QUERY 
+  SQLITE_INTROSPECTION_QUERY,
+  ROUTES,
+  DEFAULT_BASE_PATH,
+  CONTENT_TYPES,
+  SUCCESS_RESPONSE
 } from './constants';
 import type { 
   AdminHooksConstructor, 
@@ -48,7 +52,7 @@ import {
 export function withAdminHooks<Env = unknown>(
   options: AdminHooksOptions = {},
 ): AdminHooksConstructor<Env> {
-  const basePath = options.basePath ?? "/admin";
+  const basePath = options.basePath ?? DEFAULT_BASE_PATH;
 
   class AdminHooksDurableObject {
     state: DurableObjectState;
@@ -103,61 +107,61 @@ export function withAdminHooks<Env = unknown>(
 
       try {
         return await match([operation, request.method])
-          .with(["/list", HTTP_METHOD.GET], async () => {
+          .with([ROUTES.LIST, HTTP_METHOD.GET], async () => {
             const parsed = parseQueryParams(url);
             if (!parsed.success) return createErrorResponse(ERROR_MESSAGES.INVALID_LIMIT_CURSOR);
             return Response.json(await this.adminList(parsed.data.limit, parsed.data.cursor));
           })
-          .with(["/get", HTTP_METHOD.GET], async () => {
+          .with([ROUTES.GET, HTTP_METHOD.GET], async () => {
             const key = url.searchParams.get("key");
             const parsed = GetQuerySchema.safeParse({ key });
             if (!parsed.success) return createErrorResponse(ERROR_MESSAGES.MISSING_KEY);
             return Response.json(await this.adminGet(parsed.data.key));
           })
-          .with(["/put", HTTP_METHOD.POST], async () => {
+          .with([ROUTES.PUT, HTTP_METHOD.POST], async () => {
             const body = await parseBody(request, PutPayloadSchema, ERROR_MESSAGES.INVALID_PUT_BODY);
             await this.adminPut(body.key, body.value);
-            return Response.json({ success: true });
+            return Response.json(SUCCESS_RESPONSE);
           })
-          .with(["/freeze", HTTP_METHOD.PUT], async () => {
+          .with([ROUTES.FREEZE, HTTP_METHOD.PUT], async () => {
             return Response.json(await this.adminFreeze());
           })
-          .with(["/freeze", HTTP_METHOD.DELETE], async () => {
+          .with([ROUTES.FREEZE, HTTP_METHOD.DELETE], async () => {
             return Response.json(await this.adminUnfreeze());
           })
-          .with(["/freeze", HTTP_METHOD.GET], async () => {
+          .with([ROUTES.FREEZE, HTTP_METHOD.GET], async () => {
             return Response.json(await this.adminGetFreezeStatus());
           })
-          .with(["/delete", HTTP_METHOD.POST], async () => {
+          .with([ROUTES.DELETE, HTTP_METHOD.POST], async () => {
             const body = await parseBody(request, DeletePayloadSchema, ERROR_MESSAGES.INVALID_DELETE_BODY);
             await this.adminDelete(body.key);
-            return Response.json({ success: true });
+            return Response.json(SUCCESS_RESPONSE);
           })
-          .with(["/sql", HTTP_METHOD.POST], async () => {
+          .with([ROUTES.SQL, HTTP_METHOD.POST], async () => {
             const body = await parseBody(request, SqlPayloadSchema, ERROR_MESSAGES.INVALID_SQL_BODY);
             return Response.json(await this.adminSql(body.query));
           })
-          .with(["/alarm", HTTP_METHOD.GET], async () => {
+          .with([ROUTES.ALARM, HTTP_METHOD.GET], async () => {
             return Response.json(await this.adminGetAlarm());
           })
-          .with(["/alarm", HTTP_METHOD.PUT], async () => {
+          .with([ROUTES.ALARM, HTTP_METHOD.PUT], async () => {
             const body = await parseBody(request, AlarmPayloadSchema, ERROR_MESSAGES.INVALID_ALARM_BODY);
             await this.adminSetAlarm(body.timestamp);
-            return Response.json({ success: true, alarm: body.timestamp });
+            return Response.json({ ...SUCCESS_RESPONSE, alarm: body.timestamp });
           })
-          .with(["/alarm", HTTP_METHOD.DELETE], async () => {
+          .with([ROUTES.ALARM, HTTP_METHOD.DELETE], async () => {
             await this.adminDeleteAlarm();
-            return Response.json({ success: true });
+            return Response.json(SUCCESS_RESPONSE);
           })
-          .with(["/export", HTTP_METHOD.GET], async () => {
+          .with([ROUTES.EXPORT, HTTP_METHOD.GET], async () => {
             const parsed = parseQueryParams(url);
             if (!parsed.success) return createErrorResponse(ERROR_MESSAGES.INVALID_LIMIT_CURSOR);
             return Response.json(await this.adminExport(parsed.data.limit, parsed.data.cursor));
           })
-          .with(["/import", HTTP_METHOD.POST], async () => {
+          .with([ROUTES.IMPORT, HTTP_METHOD.POST], async () => {
             const body = await parseBody(request, ImportPayloadSchema, ERROR_MESSAGES.INVALID_IMPORT_BODY);
             await this.adminImport(body.data);
-            return Response.json({ success: true, imported: Object.keys(body.data).length });
+            return Response.json({ ...SUCCESS_RESPONSE, imported: Object.keys(body.data).length });
           })
           .otherwise(() => {
             return createErrorResponse(ERROR_MESSAGES.UNKNOWN_ENDPOINT, HTTP_STATUS.NOT_FOUND);
@@ -273,6 +277,17 @@ export function withAdminHooks<Env = unknown>(
     }
 
     /**
+     * Validate key and ensure mutation is allowed (KV backend, not frozen, valid key)
+     */
+    private async validateKvMutation(key?: string): Promise<void> {
+      this.ensureKvBackend();
+      if (key !== undefined) {
+        this.validateKey(key);
+      }
+      await this.ensureNotFrozen();
+    }
+
+    /**
      * List all storage keys or SQL tables
      */
     async adminList(limit = DEFAULT_LIST_LIMIT, cursor?: string): Promise<AdminListResponse> {
@@ -317,9 +332,7 @@ export function withAdminHooks<Env = unknown>(
      * Put a storage value (blocked if frozen or if attempting to modify system keys)
      */
     async adminPut(key: string, value: unknown): Promise<void> {
-      this.ensureKvBackend();
-      this.validateKey(key);
-      await this.ensureNotFrozen();
+      await this.validateKvMutation(key);
       await this.state.storage.put(key, value);
     }
 
@@ -327,9 +340,7 @@ export function withAdminHooks<Env = unknown>(
      * Delete a storage value (blocked if frozen or if attempting to modify system keys)
      */
     async adminDelete(key: string): Promise<void> {
-      this.ensureKvBackend();
-      this.validateKey(key);
-      await this.ensureNotFrozen();
+      await this.validateKvMutation(key);
       await this.state.storage.delete(key);
     }
 
@@ -344,7 +355,7 @@ export function withAdminHooks<Env = unknown>(
         throw new AdminError(ERROR_MESSAGES.SQL_NOT_AVAILABLE, HTTP_STATUS.BAD_REQUEST);
       }
 
-      if (query.includes(INTERNAL_SYSTEM_TABLE)) {
+      if (query.toLowerCase().includes(INTERNAL_SYSTEM_TABLE.toLowerCase())) {
         throw new AdminError(ERROR_MESSAGES.SYSTEM_KEY_MODIFICATION, HTTP_STATUS.BAD_REQUEST);
       }
 
@@ -418,8 +429,7 @@ export function withAdminHooks<Env = unknown>(
      * Import data (merge with existing) - blocked if frozen
      */
     async adminImport(data: Record<string, unknown>): Promise<void> {
-      this.ensureKvBackend();
-      await this.ensureNotFrozen();
+      await this.validateKvMutation();
 
       for (const key of Object.keys(data)) {
         this.validateKey(key);
@@ -473,7 +483,7 @@ export function withAdminHooks<Env = unknown>(
       return new Response(
         "Durable Object with admin hooks enabled. Override fetch() to add your logic.",
         {
-          headers: { "Content-Type": "text/plain" },
+          headers: { "Content-Type": CONTENT_TYPES.TEXT },
         },
       );
     }
