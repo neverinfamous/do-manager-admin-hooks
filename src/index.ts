@@ -487,13 +487,11 @@ export function withAdminHooks<Env = unknown>(
           throw new AdminError(ERROR_MESSAGES.SQLITE_CURSOR, HTTP_STATUS.BAD_REQUEST);
         }
         
-        const safeLimit = Math.min(Math.max(1, limit), MAX_LIST_LIMIT);
-        
         const result = this.state.storage.sql.exec<{ name: string }>(
-          `${SQLITE_INTROSPECTION_QUERY} LIMIT ${safeLimit} OFFSET ${offset}`
+          `${SQLITE_INTROSPECTION_QUERY} LIMIT ${limit} OFFSET ${offset}`
         );
         const tables = result.toArray().map((row) => row.name);
-        const nextCursor = tables.length === safeLimit ? (offset + safeLimit).toString() : undefined;
+        const nextCursor = tables.length === limit ? (offset + limit).toString() : undefined;
         
         return { tables, cursor: nextCursor };
       }
@@ -588,8 +586,7 @@ export function withAdminHooks<Env = unknown>(
      * Export all storage data
      */
     async adminExport(limit = DEFAULT_LIST_LIMIT, cursor?: string): Promise<AdminExportResponse> {
-      const safeLimit = Math.min(Math.max(1, limit), MAX_LIST_LIMIT);
-      const options = buildListOptions(safeLimit, cursor);
+      const options = buildListOptions(limit, cursor);
       const entries = await this.state.storage.list(options);
       const data: Record<string, unknown> = {};
 
@@ -616,11 +613,6 @@ export function withAdminHooks<Env = unknown>(
      */
     async adminImport(data: Record<string, unknown>): Promise<void> {
       await this.ensureNotFrozen();
-      
-      const keyCount = Object.keys(data).length;
-      if (keyCount > MAX_IMPORT_KEYS) {
-        throw new AdminError(ERROR_MESSAGES.PAYLOAD_TOO_LARGE, HTTP_STATUS.BAD_REQUEST);
-      }
 
       for (const key of Object.keys(data)) {
         this.validateKey(key);
