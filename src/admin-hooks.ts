@@ -34,12 +34,13 @@ import { AdminError, createErrorResponse } from './errors';
 import { 
   timingSafeEqual, 
   parseBody, 
-  parseQueryParams, 
+  parseQuery, 
   hasSqlBackend, 
   isSystemKey, 
   buildListOptions 
 } from './utils';
 import { 
+  QuerySchema,
   GetQuerySchema, 
   PutPayloadSchema, 
   DeletePayloadSchema, 
@@ -109,15 +110,12 @@ export function withAdminHooks<Env = unknown>(
       try {
         return await match([operation, request.method])
           .with([ROUTES.LIST, HTTP_METHOD.GET], async () => {
-            const parsed = parseQueryParams(url);
-            if (!parsed.success) return createErrorResponse(ERROR_MESSAGES.INVALID_LIMIT_CURSOR);
-            return Response.json(await this.adminList(parsed.data.limit, parsed.data.cursor));
+            const query = parseQuery(url, QuerySchema, ERROR_MESSAGES.INVALID_LIMIT_CURSOR);
+            return Response.json(await this.adminList(query.limit, query.cursor));
           })
           .with([ROUTES.GET, HTTP_METHOD.GET], async () => {
-            const key = url.searchParams.get("key");
-            const parsed = GetQuerySchema.safeParse({ key });
-            if (!parsed.success) return createErrorResponse(ERROR_MESSAGES.MISSING_KEY);
-            return Response.json(await this.adminGet(parsed.data.key));
+            const query = parseQuery(url, GetQuerySchema, ERROR_MESSAGES.MISSING_KEY);
+            return Response.json(await this.adminGet(query.key));
           })
           .with([ROUTES.PUT, HTTP_METHOD.POST], async () => {
             const body = await parseBody(request, PutPayloadSchema, ERROR_MESSAGES.INVALID_PUT_BODY);
@@ -155,9 +153,8 @@ export function withAdminHooks<Env = unknown>(
             return Response.json(SUCCESS_RESPONSE);
           })
           .with([ROUTES.EXPORT, HTTP_METHOD.GET], async () => {
-            const parsed = parseQueryParams(url);
-            if (!parsed.success) return createErrorResponse(ERROR_MESSAGES.INVALID_LIMIT_CURSOR);
-            return Response.json(await this.adminExport(parsed.data.limit, parsed.data.cursor));
+            const query = parseQuery(url, QuerySchema, ERROR_MESSAGES.INVALID_LIMIT_CURSOR);
+            return Response.json(await this.adminExport(query.limit, query.cursor));
           })
           .with([ROUTES.IMPORT, HTTP_METHOD.POST], async () => {
             const body = await parseBody(request, ImportPayloadSchema, ERROR_MESSAGES.INVALID_IMPORT_BODY);

@@ -2,7 +2,6 @@ import type { z } from 'zod';
 import type { DurableObjectListOptions } from '@cloudflare/workers-types';
 import { ALGO_SHA256, HTTP_STATUS, SYSTEM_KEY_PREFIX } from './constants';
 import { AdminError } from './errors';
-import { QuerySchema } from './schemas';
 import type { SqlStorageBackend } from './types';
 
 export async function timingSafeEqual(a: string, b: string): Promise<boolean> {
@@ -38,11 +37,14 @@ export async function parseBody<T>(request: Request, schema: z.ZodType<T>, error
   }
 }
 
-export function parseQueryParams(url: URL): ReturnType<typeof QuerySchema.safeParse> {
-  const limit = url.searchParams.get("limit") ?? undefined;
-  const cursor = url.searchParams.get("cursor") ?? undefined;
-  
-  return QuerySchema.safeParse({ limit, cursor });
+export function parseQuery<T>(url: URL, schema: z.ZodType<T>, errorMessage: string): T {
+  const params = Object.fromEntries(url.searchParams.entries());
+  const parsed = schema.safeParse(params);
+  if (!parsed.success) {
+    const issues = parsed.error.issues.map((i) => i.message).join(', ');
+    throw new AdminError(`${errorMessage}: ${issues}`, HTTP_STATUS.BAD_REQUEST);
+  }
+  return parsed.data;
 }
 
 export function hasSqlBackend(

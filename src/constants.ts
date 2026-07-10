@@ -67,6 +67,9 @@ export const DEFAULT_LIST_LIMIT = 1000;
 export const MAX_LIST_LIMIT = 5000;
 export const MAX_IMPORT_KEYS = 10000;
 export const BATCH_SIZE = 128;
+export const MAX_KEY_BYTES = 2048;
+export const MAX_SQL_QUERY_LENGTH = 100000;
+export const MAX_CURSOR_LENGTH = 4096;
 
 export const SYSTEM_KEY_PREFIX: string = "__do_manager_";
 export const FROZEN_STORAGE_KEY: string = `${SYSTEM_KEY_PREFIX}frozen`;
