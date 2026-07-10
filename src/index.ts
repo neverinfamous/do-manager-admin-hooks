@@ -128,6 +128,7 @@ const FROZEN_STORAGE_KEY = "__do_manager_frozen";
 interface AdminListResponse {
   keys?: string[];
   tables?: string[];
+  cursor?: string;
 }
 
 interface AdminGetResponse {
@@ -138,6 +139,7 @@ interface AdminExportResponse {
   data: Record<string, unknown>;
   exportedAt: string;
   keyCount: number;
+  cursor?: string;
 }
 
 interface AdminAlarmResponse {
@@ -162,7 +164,8 @@ export interface AdminHooksInstance {
   state: DurableObjectState;
   env: unknown;
   handleAdminRequest(request: Request): Promise<Response | null>;
-  adminList(): Promise<AdminListResponse>;
+  ensureNotFrozen(key?: string): Promise<void>;
+  adminList(limit?: number, cursor?: string): Promise<AdminListResponse>;
   adminGet(key: string): Promise<AdminGetResponse>;
   adminPut(key: string, value: unknown): Promise<void>;
   adminDelete(key: string): Promise<void>;
@@ -170,7 +173,7 @@ export interface AdminHooksInstance {
   adminGetAlarm(): Promise<AdminAlarmResponse>;
   adminSetAlarm(timestamp: number): Promise<void>;
   adminDeleteAlarm(): Promise<void>;
-  adminExport(): Promise<AdminExportResponse>;
+  adminExport(limit?: number, cursor?: string): Promise<AdminExportResponse>;
   adminImport(data: Record<string, unknown>): Promise<void>;
   adminFreeze(): Promise<AdminFreezeResponse>;
   adminUnfreeze(): Promise<AdminFreezeResponse>;
@@ -312,7 +315,10 @@ export function withAdminHooks(
       try {
         return await match([operation, request.method])
           .with(["/list", "GET"], async () => {
-            return Response.json(await this.adminList());
+            const limitParam = url.searchParams.get("limit");
+            const cursor = url.searchParams.get("cursor") ?? undefined;
+            const limit = limitParam ? parseInt(limitParam, 10) : undefined;
+            return Response.json(await this.adminList(limit, cursor));
           })
           .with(["/get", "GET"], async () => {
             const key = url.searchParams.get("key");
@@ -363,7 +369,10 @@ export function withAdminHooks(
             return Response.json({ success: true });
           })
           .with(["/export", "GET"], async () => {
-            return Response.json(await this.adminExport());
+            const limitParam = url.searchParams.get("limit");
+            const cursor = url.searchParams.get("cursor") ?? undefined;
+            const limit = limitParam ? parseInt(limitParam, 10) : undefined;
+            return Response.json(await this.adminExport(limit, cursor));
           })
           .with(["/import", "POST"], async () => {
             const rawBody = await safeParseJson(request);
@@ -382,9 +391,24 @@ export function withAdminHooks(
     }
 
     /**
+     * Helper to check if the instance is frozen.
+     * Throws an error if frozen and the operation is not on the frozen key itself.
+     */
+    async ensureNotFrozen(key?: string): Promise<void> {
+      if (key === FROZEN_STORAGE_KEY) return;
+      
+      const isFrozen = await this.state.storage.get<boolean>(FROZEN_STORAGE_KEY);
+      if (isFrozen) {
+        throw new Error(
+          "Instance is frozen. Unfreeze before making changes.",
+        );
+      }
+    }
+
+    /**
      * List all storage keys or SQL tables
      */
-    async adminList(): Promise<AdminListResponse> {
+    async adminList(limit = 1000, cursor?: string): Promise<AdminListResponse> {
       // Check for SQLite backend
       if (this.state.storage.sql) {
         const result = this.state.storage.sql.exec<{ name: string }>(
@@ -394,8 +418,16 @@ export function withAdminHooks(
       }
 
       // KV backend
-      const entries = await this.state.storage.list();
-      return { keys: [...entries.keys()] };
+      const options: DurableObjectStorageListOptions = { limit };
+      if (cursor) {
+        options.startAfter = cursor;
+      }
+      
+      const entries = await this.state.storage.list(options);
+      const keys = [...entries.keys()];
+      const nextCursor = keys.length === limit ? keys[keys.length - 1] : undefined;
+      
+      return { keys, cursor: nextCursor };
     }
 
     /**
@@ -410,16 +442,7 @@ export function withAdminHooks(
      * Put a storage value (blocked if frozen, unless it's the frozen key itself)
      */
     async adminPut(key: string, value: unknown): Promise<void> {
-      // Allow setting/unsetting the frozen key itself
-      if (key !== FROZEN_STORAGE_KEY) {
-        const isFrozen =
-          await this.state.storage.get<boolean>(FROZEN_STORAGE_KEY);
-        if (isFrozen) {
-          throw new Error(
-            "Instance is frozen. Unfreeze before making changes.",
-          );
-        }
-      }
+      await this.ensureNotFrozen(key);
       await this.state.storage.put(key, value);
     }
 
@@ -427,16 +450,7 @@ export function withAdminHooks(
      * Delete a storage value (blocked if frozen, unless it's the frozen key itself)
      */
     async adminDelete(key: string): Promise<void> {
-      // Allow deleting the frozen key itself (for unfreezing)
-      if (key !== FROZEN_STORAGE_KEY) {
-        const isFrozen =
-          await this.state.storage.get<boolean>(FROZEN_STORAGE_KEY);
-        if (isFrozen) {
-          throw new Error(
-            "Instance is frozen. Unfreeze before making changes.",
-          );
-        }
-      }
+      await this.ensureNotFrozen(key);
       await this.state.storage.delete(key);
     }
 
@@ -483,18 +497,27 @@ export function withAdminHooks(
     /**
      * Export all storage data
      */
-    async adminExport(): Promise<AdminExportResponse> {
-      const entries = await this.state.storage.list();
+    async adminExport(limit = 1000, cursor?: string): Promise<AdminExportResponse> {
+      const options: DurableObjectStorageListOptions = { limit };
+      if (cursor) {
+        options.startAfter = cursor;
+      }
+      const entries = await this.state.storage.list(options);
       const data: Record<string, unknown> = {};
 
+      let lastKey: string | undefined;
       for (const [key, value] of entries) {
         data[key] = value;
+        lastKey = key;
       }
+
+      const nextCursor = entries.size === limit ? lastKey : undefined;
 
       return {
         data,
         exportedAt: new Date().toISOString(),
         keyCount: entries.size,
+        cursor: nextCursor,
       };
     }
 
@@ -502,11 +525,7 @@ export function withAdminHooks(
      * Import data (merge with existing) - blocked if frozen
      */
     async adminImport(data: Record<string, unknown>): Promise<void> {
-      const isFrozen =
-        await this.state.storage.get<boolean>(FROZEN_STORAGE_KEY);
-      if (isFrozen) {
-        throw new Error("Instance is frozen. Unfreeze before importing data.");
-      }
+      await this.ensureNotFrozen();
       await this.state.storage.put(data);
     }
 
