@@ -61,6 +61,7 @@ export const HTTP_STATUS = {
 
 const DEFAULT_LIST_LIMIT = 1000;
 const MAX_LIST_LIMIT = 5000;
+const MAX_IMPORT_KEYS = 10000;
 
 const PutPayloadSchema = z.object({
   key: z.string().min(1, 'Key cannot be empty'),
@@ -80,8 +81,8 @@ const AlarmPayloadSchema = z.object({
 });
 
 const ImportPayloadSchema = z.object({
-  data: z.record(z.string(), z.unknown()).refine((data) => Object.keys(data).length <= 10000, {
-    message: "Payload too large. Maximum 10,000 keys per import chunk.",
+  data: z.record(z.string(), z.unknown()).refine((data) => Object.keys(data).length <= MAX_IMPORT_KEYS, {
+    message: `Payload too large. Maximum ${MAX_IMPORT_KEYS} keys per import chunk.`,
   }),
 });
 
@@ -192,7 +193,7 @@ export interface AdminHooksInstance<Env = unknown> {
   adminGet(key: string): Promise<AdminGetResponse>;
   adminPut(key: string, value: unknown): Promise<void>;
   adminDelete(key: string): Promise<void>;
-  adminSql(query: string): AdminSqlResponse;
+  adminSql(query: string): Promise<AdminSqlResponse>;
   adminGetAlarm(): Promise<AdminAlarmResponse>;
   adminSetAlarm(timestamp: number): Promise<void>;
   adminDeleteAlarm(): Promise<void>;
@@ -255,18 +256,16 @@ function createErrorResponse(message: string, status: number = HTTP_STATUS.BAD_R
  * Throws an AdminError if parsing fails, which is caught by the global error handler.
  */
 async function parseBody<T>(request: Request, schema: z.ZodType<T>, errorMessage: string): Promise<T> {
-  let rawBody: unknown = null;
   try {
-    rawBody = await request.json();
+    const rawBody = await request.json();
+    const parsed = schema.safeParse(rawBody);
+    if (!parsed.success) {
+      throw new AdminError(errorMessage, HTTP_STATUS.BAD_REQUEST);
+    }
+    return parsed.data;
   } catch {
-    // Ignore invalid JSON, will be caught by validation
-  }
-  
-  const parsed = schema.safeParse(rawBody);
-  if (!parsed.success) {
     throw new AdminError(errorMessage, HTTP_STATUS.BAD_REQUEST);
   }
-  return parsed.data;
 }
 
 /**
@@ -394,9 +393,8 @@ export function withAdminHooks<Env = unknown>(
             return Response.json({ success: true });
           })
           .with(["/sql", "POST"], async () => {
-            await this.ensureNotFrozen();
             const body = await parseBody(request, SqlPayloadSchema, "Invalid or missing query in body");
-            return Response.json(this.adminSql(body.query));
+            return Response.json(await this.adminSql(body.query));
           })
           .with(["/alarm", "GET"], async () => {
             return Response.json(await this.adminGetAlarm());
@@ -465,7 +463,7 @@ export function withAdminHooks<Env = unknown>(
       // Check for SQLite backend
       if (hasSqlBackend(this.state.storage)) {
         const offset = cursor ? Number(cursor) : 0;
-        if (!Number.isInteger(offset) || offset < 0) {
+        if (!Number.isSafeInteger(offset) || offset < 0) {
           throw new AdminError("Invalid cursor format for SQLite backend", HTTP_STATUS.BAD_REQUEST);
         }
         
@@ -520,7 +518,9 @@ export function withAdminHooks<Env = unknown>(
     /**
      * Execute SQL query (SQLite backend only)
      */
-    adminSql(query: string): AdminSqlResponse {
+    async adminSql(query: string): Promise<AdminSqlResponse> {
+      await this.ensureNotFrozen();
+
       if (!hasSqlBackend(this.state.storage)) {
         throw new AdminError("SQL not available - this DO uses KV storage backend", HTTP_STATUS.BAD_REQUEST);
       }
