@@ -88,9 +88,11 @@ export function withAdminHooks<Env = unknown>(
         return null;
       }
 
-      if (options.requireAuth) {
-        const providedKey = request.headers.get(ADMIN_KEY_HEADER) ?? "";
-        const expectedKey = options.adminKey ?? "";
+      const requireAuth = options.requireAuth ?? (options.adminKey !== undefined);
+
+      if (requireAuth) {
+        const providedKey = request.headers.get(ADMIN_KEY_HEADER);
+        const expectedKey = options.adminKey;
 
         if (!expectedKey) {
           return createErrorResponse(
@@ -99,7 +101,7 @@ export function withAdminHooks<Env = unknown>(
           );
         }
 
-        if (!(await timingSafeEqual(providedKey, expectedKey))) {
+        if (!providedKey || !(await timingSafeEqual(providedKey, expectedKey))) {
           return createErrorResponse(ERROR_MESSAGES.UNAUTHORIZED, HTTP_STATUS.UNAUTHORIZED);
         }
       }
