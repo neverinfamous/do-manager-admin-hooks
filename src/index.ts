@@ -71,11 +71,13 @@ const AlarmPayloadSchema = z.object({
 });
 
 const ImportPayloadSchema = z.object({
-  data: z.record(z.string(), z.unknown()),
+  data: z.record(z.string(), z.unknown()).refine((data) => Object.keys(data).length <= 10000, {
+    message: "Payload too large. Maximum 10,000 keys per import chunk.",
+  }),
 });
 
 const QuerySchema = z.object({
-  limit: z.number().int().min(1).max(MAX_LIST_LIMIT).optional(),
+  limit: z.coerce.number().int().min(1).max(MAX_LIST_LIMIT).optional(),
   cursor: z.string().optional(),
 });
 
@@ -83,10 +85,8 @@ const QuerySchema = z.object({
  * Safely parse list/export query parameters from URL
  */
 function parseQueryParams(url: URL): ReturnType<typeof QuerySchema.safeParse> {
-  const limitParam = url.searchParams.get("limit");
+  const limit = url.searchParams.get("limit") ?? undefined;
   const cursor = url.searchParams.get("cursor") ?? undefined;
-  
-  const limit = limitParam ? parseInt(limitParam, 10) : undefined;
   
   return QuerySchema.safeParse({ limit, cursor });
 }
@@ -123,8 +123,9 @@ function hasSqlBackend(
  * Special storage key used to mark an instance as frozen (read-only)
  * When set to true, all put/delete operations are blocked
  */
-const FROZEN_STORAGE_KEY = "__do_manager_frozen";
-const FROZEN_AT_STORAGE_KEY = "__do_manager_frozen_at";
+const SYSTEM_KEY_PREFIX = "__do_manager_";
+const FROZEN_STORAGE_KEY = `${SYSTEM_KEY_PREFIX}frozen`;
+const FROZEN_AT_STORAGE_KEY = `${SYSTEM_KEY_PREFIX}frozen_at`;
 
 /**
  * Cloudflare Durable Objects limit put() to 128 keys per operation
@@ -473,7 +474,7 @@ export function withAdminHooks<Env = unknown>(
      * Put a storage value (blocked if frozen or if attempting to modify system keys)
      */
     async adminPut(key: string, value: unknown): Promise<void> {
-      if (key.startsWith("__do_manager_")) {
+      if (key.startsWith(SYSTEM_KEY_PREFIX)) {
         throw new Error("Cannot manually modify internal system keys");
       }
       await this.ensureNotFrozen();
@@ -484,7 +485,7 @@ export function withAdminHooks<Env = unknown>(
      * Delete a storage value (blocked if frozen or if attempting to modify system keys)
      */
     async adminDelete(key: string): Promise<void> {
-      if (key.startsWith("__do_manager_")) {
+      if (key.startsWith(SYSTEM_KEY_PREFIX)) {
         throw new Error("Cannot manually modify internal system keys");
       }
       await this.ensureNotFrozen();
