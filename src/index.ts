@@ -51,7 +51,6 @@ class AdminError extends Error {
 }
 
 export const HTTP_STATUS = {
-  OK: 200,
   BAD_REQUEST: 400,
   UNAUTHORIZED: 401,
   NOT_FOUND: 404,
@@ -197,7 +196,7 @@ export interface AdminHooksInstance<Env = unknown> {
   adminUnfreeze(): Promise<AdminFreezeResponse>;
   adminGetFreezeStatus(): Promise<AdminFreezeResponse>;
   fetch(request: Request): Promise<Response>;
-  alarm(): void;
+  alarm(): Promise<void> | void;
 }
 
 /**
@@ -246,14 +245,22 @@ function createErrorResponse(message: string, status: number = HTTP_STATUS.BAD_R
 }
 
 /**
- * Safely parse JSON from a request body, returning null if invalid or empty
+ * Safely parse and validate JSON from a request body against a Zod schema.
+ * Throws an AdminError if parsing fails, which is caught by the global error handler.
  */
-async function safeParseJson(request: Request): Promise<unknown> {
+async function parseBody<T>(request: Request, schema: z.ZodType<T>, errorMessage: string): Promise<T> {
+  let rawBody: unknown = null;
   try {
-    return await request.json();
+    rawBody = await request.json();
   } catch {
-    return null;
+    // Ignore invalid JSON, will be caught by validation
   }
+  
+  const parsed = schema.safeParse(rawBody);
+  if (!parsed.success) {
+    throw new AdminError(errorMessage, HTTP_STATUS.BAD_REQUEST);
+  }
+  return parsed.data;
 }
 
 /**
@@ -361,10 +368,8 @@ export function withAdminHooks<Env = unknown>(
             return Response.json(await this.adminGet(key));
           })
           .with(["/put", "POST"], async () => {
-            const rawBody = await safeParseJson(request);
-            const parsed = PutPayloadSchema.safeParse(rawBody);
-            if (!parsed.success) return createErrorResponse("Invalid or missing key/value in body");
-            await this.adminPut(parsed.data.key, parsed.data.value);
+            const body = await parseBody(request, PutPayloadSchema, "Invalid or missing key/value in body");
+            await this.adminPut(body.key, body.value);
             return Response.json({ success: true });
           })
           .with(["/freeze", "PUT"], async () => {
@@ -377,28 +382,22 @@ export function withAdminHooks<Env = unknown>(
             return Response.json(await this.adminGetFreezeStatus());
           })
           .with(["/delete", "POST"], async () => {
-            const rawBody = await safeParseJson(request);
-            const parsed = DeletePayloadSchema.safeParse(rawBody);
-            if (!parsed.success) return createErrorResponse("Invalid or missing key in body");
-            await this.adminDelete(parsed.data.key);
+            const body = await parseBody(request, DeletePayloadSchema, "Invalid or missing key in body");
+            await this.adminDelete(body.key);
             return Response.json({ success: true });
           })
           .with(["/sql", "POST"], async () => {
             await this.ensureNotFrozen();
-            const rawBody = await safeParseJson(request);
-            const parsed = SqlPayloadSchema.safeParse(rawBody);
-            if (!parsed.success) return createErrorResponse("Invalid or missing query in body");
-            return Response.json(this.adminSql(parsed.data.query));
+            const body = await parseBody(request, SqlPayloadSchema, "Invalid or missing query in body");
+            return Response.json(this.adminSql(body.query));
           })
           .with(["/alarm", "GET"], async () => {
             return Response.json(await this.adminGetAlarm());
           })
           .with(["/alarm", "PUT"], async () => {
-            const rawBody = await safeParseJson(request);
-            const parsed = AlarmPayloadSchema.safeParse(rawBody);
-            if (!parsed.success) return createErrorResponse("Invalid or missing timestamp in body");
-            await this.adminSetAlarm(parsed.data.timestamp);
-            return Response.json({ success: true, alarm: parsed.data.timestamp });
+            const body = await parseBody(request, AlarmPayloadSchema, "Invalid or missing timestamp in body");
+            await this.adminSetAlarm(body.timestamp);
+            return Response.json({ success: true, alarm: body.timestamp });
           })
           .with(["/alarm", "DELETE"], async () => {
             await this.adminDeleteAlarm();
@@ -410,11 +409,9 @@ export function withAdminHooks<Env = unknown>(
             return Response.json(await this.adminExport(parsed.data.limit, parsed.data.cursor));
           })
           .with(["/import", "POST"], async () => {
-            const rawBody = await safeParseJson(request);
-            const parsed = ImportPayloadSchema.safeParse(rawBody);
-            if (!parsed.success) return createErrorResponse("Invalid data object");
-            await this.adminImport(parsed.data.data);
-            return Response.json({ success: true, imported: Object.keys(parsed.data.data).length });
+            const body = await parseBody(request, ImportPayloadSchema, "Invalid data object");
+            await this.adminImport(body.data);
+            return Response.json({ success: true, imported: Object.keys(body.data).length });
           })
           .otherwise(() => {
             return createErrorResponse("Unknown admin endpoint", HTTP_STATUS.NOT_FOUND);
@@ -460,8 +457,8 @@ export function withAdminHooks<Env = unknown>(
     async adminList(limit = DEFAULT_LIST_LIMIT, cursor?: string): Promise<AdminListResponse> {
       // Check for SQLite backend
       if (hasSqlBackend(this.state.storage)) {
-        const offset = cursor ? parseInt(cursor, 10) : 0;
-        if (isNaN(offset)) {
+        const offset = cursor ? Number(cursor) : 0;
+        if (!Number.isInteger(offset) || offset < 0) {
           throw new Error("Invalid cursor format for SQLite backend");
         }
         
@@ -627,7 +624,7 @@ export function withAdminHooks<Env = unknown>(
       const frozenAt = await this.state.storage.get<string>(
         FROZEN_AT_STORAGE_KEY,
       );
-      return { frozen: !!isFrozen, frozenAt: frozenAt ?? undefined };
+      return { frozen: !!isFrozen, frozenAt };
     }
 
     /**
@@ -654,7 +651,7 @@ export function withAdminHooks<Env = unknown>(
     /**
      * Optional alarm handler - override this in your subclass if needed
      */
-    alarm(): void {
+    alarm(): Promise<void> | void {
       // Override in subclass to handle alarms
     }
   }
