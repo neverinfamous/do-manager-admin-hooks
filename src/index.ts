@@ -65,9 +65,28 @@ const ImportPayloadSchema = z.object({
 });
 
 const QuerySchema = z.object({
-  limit: z.coerce.number().int().min(1).max(5000).optional(),
+  limit: z.number().int().min(1).max(5000).optional(),
   cursor: z.string().optional(),
 });
+
+/**
+ * Safely parse list/export query parameters from URL
+ */
+function parseQueryParams(url: URL): ReturnType<typeof QuerySchema.safeParse> {
+  const limitParam = url.searchParams.get("limit");
+  const cursor = url.searchParams.get("cursor") ?? undefined;
+  
+  const limit = limitParam ? parseInt(limitParam, 10) : undefined;
+  
+  return QuerySchema.safeParse({ limit, cursor });
+}
+
+/**
+ * Type guard for SQLite storage backend
+ */
+function hasSqlBackend(storage: unknown): storage is { sql: { exec: <T = unknown>(query: string) => { toArray: () => T[], columnNames: string[] } } } {
+  return typeof storage === 'object' && storage !== null && 'sql' in storage;
+}
 
 /**
  * Special storage key used to mark an instance as frozen (read-only)
@@ -281,9 +300,7 @@ export function withAdminHooks<Env = unknown>(
       try {
         return await match([operation, request.method])
           .with(["/list", "GET"], async () => {
-            const limitParam = url.searchParams.get("limit");
-            const cursor = url.searchParams.get("cursor") ?? undefined;
-            const parsed = QuerySchema.safeParse({ limit: limitParam, cursor });
+            const parsed = parseQueryParams(url);
             if (!parsed.success) return createErrorResponse("Invalid limit or cursor");
             return Response.json(await this.adminList(parsed.data.limit, parsed.data.cursor));
           })
@@ -336,9 +353,7 @@ export function withAdminHooks<Env = unknown>(
             return Response.json({ success: true });
           })
           .with(["/export", "GET"], async () => {
-            const limitParam = url.searchParams.get("limit");
-            const cursor = url.searchParams.get("cursor") ?? undefined;
-            const parsed = QuerySchema.safeParse({ limit: limitParam, cursor });
+            const parsed = parseQueryParams(url);
             if (!parsed.success) return createErrorResponse("Invalid limit or cursor");
             return Response.json(await this.adminExport(parsed.data.limit, parsed.data.cursor));
           })
@@ -378,8 +393,7 @@ export function withAdminHooks<Env = unknown>(
      */
     async adminList(limit = DEFAULT_LIST_LIMIT, cursor?: string): Promise<AdminListResponse> {
       // Check for SQLite backend
-      const storageDict = this.state.storage as unknown as { sql?: unknown };
-      if (storageDict.sql !== undefined) {
+      if (hasSqlBackend(this.state.storage)) {
         const result = this.state.storage.sql.exec<{ name: string }>(
           "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%'",
         );
@@ -427,8 +441,7 @@ export function withAdminHooks<Env = unknown>(
      * Execute SQL query (SQLite backend only)
      */
     adminSql(query: string): AdminSqlResponse {
-      const storageDict = this.state.storage as unknown as { sql?: unknown };
-      if (storageDict.sql === undefined) {
+      if (!hasSqlBackend(this.state.storage)) {
         throw new Error("SQL not available - this DO uses KV storage backend");
       }
 
