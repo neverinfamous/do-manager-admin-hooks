@@ -103,7 +103,7 @@ export function withAdminHooks<Env = unknown>(
       }
 
       const adminPath = path.slice(basePath.length);
-      const operation = adminPath === "" ? "/" : (adminPath.startsWith("/") ? adminPath : `/${adminPath}`);
+      const operation = adminPath.startsWith("/") ? adminPath : `/${adminPath}`;
 
       try {
         return await match([operation, request.method])
@@ -192,17 +192,27 @@ export function withAdminHooks<Env = unknown>(
             return { isFrozen: true, frozenAt: timeRow?.value };
           }
           return { isFrozen: false };
-        } catch {
-          return { isFrozen: false };
+        } catch (error) {
+          if (error instanceof Error && error.message.includes(ERROR_MESSAGES.SQLITE_NO_SUCH_TABLE)) {
+            return { isFrozen: false };
+          }
+          throw new AdminError(ERROR_MESSAGES.SQL_FAILED, HTTP_STATUS.INTERNAL_SERVER_ERROR);
         }
       } else {
         const isFrozenRaw = await this.state.storage.get(FROZEN_STORAGE_KEY);
         const frozenAtRaw = await this.state.storage.get(FROZEN_AT_STORAGE_KEY);
         
-        const isFrozen = z.union([z.boolean(), z.string()]).transform(v => v === true || v === FROZEN_TRUE_VALUE).optional().catch(false).parse(isFrozenRaw);
-        const frozenAt = z.string().optional().catch(undefined).parse(frozenAtRaw);
+        let isFrozen = false;
+        if (isFrozenRaw !== undefined) {
+          const parsed = z.union([z.boolean(), z.string()]).safeParse(isFrozenRaw);
+          if (parsed.success) {
+            isFrozen = parsed.data === true || parsed.data === FROZEN_TRUE_VALUE;
+          }
+        }
         
-        return { isFrozen: !!isFrozen, frozenAt };
+        const frozenAt = typeof frozenAtRaw === 'string' ? frozenAtRaw : undefined;
+        
+        return { isFrozen, frozenAt };
       }
     }
 
@@ -211,12 +221,13 @@ export function withAdminHooks<Env = unknown>(
      */
     async setFreezeState(frozen: boolean): Promise<string | undefined> {
       const sql = this.getSql();
+      const frozenAt = frozen ? new Date().toISOString() : undefined;
+
       if (sql) {
         sql.exec(
           `CREATE TABLE IF NOT EXISTS ${INTERNAL_SYSTEM_TABLE} (key TEXT PRIMARY KEY, value TEXT)`
         );
-        if (frozen) {
-          const frozenAt = new Date().toISOString();
+        if (frozen && frozenAt) {
           sql.exec(
             `INSERT OR REPLACE INTO ${INTERNAL_SYSTEM_TABLE} (key, value) VALUES ('${FROZEN_STORAGE_KEY}', '${FROZEN_TRUE_VALUE}'), ('${FROZEN_AT_STORAGE_KEY}', '${frozenAt}')`
           );
@@ -228,8 +239,7 @@ export function withAdminHooks<Env = unknown>(
           return undefined;
         }
       } else {
-        if (frozen) {
-          const frozenAt = new Date().toISOString();
+        if (frozen && frozenAt) {
           await this.state.storage.put(FROZEN_STORAGE_KEY, FROZEN_TRUE_VALUE);
           await this.state.storage.put(FROZEN_AT_STORAGE_KEY, frozenAt);
           return frozenAt;

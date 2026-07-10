@@ -49,6 +49,7 @@ export const ERROR_MESSAGES = {
   SQL_NOT_AVAILABLE: "SQL not available - this DO uses KV storage backend",
   SQL_FAILED: "SQL execution failed",
   SQLITE_CURSOR: "Invalid cursor format for SQLite backend",
+  SQLITE_NO_SUCH_TABLE: "no such table",
   PAYLOAD_TOO_LARGE: "Payload too large. Maximum keys exceeded.",
   KV_NOT_AVAILABLE: "KV operations not available - this DO uses SQL storage backend"
 } as const;
