@@ -1,177 +1,38 @@
 # Changelog
 
-All notable changes to `do-manager-admin-hooks`.
+All notable changes to this project are documented in this file.
+This changelog is auto-generated from Git history using [lib-git-history](https://github.com/neverinfamous/adamic).
 
----
+## [v1.1.5]
 
-## [Unreleased](https://github.com/neverinfamous/do-manager-admin-hooks/compare/v1.1.8...HEAD)
+### Bug Fixes
 
----
+- configure ignoreDeprecations for typescript 6 by **Chris & Mike** ([2ea6409](https://github.com/neverinfamous/do-manager-admin-hooks/commit/2ea64093c2900c288a1c546a525ff178e9082485))
 
-## [1.1.8](https://github.com/neverinfamous/do-manager-admin-hooks/releases/tag/v1.1.8) - 2026-05-15
+## [v1.1.4]
 
-### Changed
+### Bug Fixes
 
-**Dependency Updates**
+- address PR review feedback from Copilot by **Chris & Mike** ([57c26d8](https://github.com/neverinfamous/do-manager-admin-hooks/commit/57c26d84eb3efb81497aec4bfad3b11598c4aeb9))
 
-- Bumped `@cloudflare/workers-types` to `^4.20260515.1`
-- Bumped `typescript-eslint` to `^8.59.3`
+## [v1.1.1]
 
----
+### Bug Fixes
 
-## [1.1.7](https://github.com/neverinfamous/do-manager-admin-hooks/releases/tag/v1.1.7) - 2026-05-05
+- routing for instance name prefixes in admin paths v1.1.1 by **Temp** ([fea0b4b](https://github.com/neverinfamous/do-manager-admin-hooks/commit/fea0b4b12b5d7c87c7e54c88c21fb7cb4b0a011b))
 
-### Changed
+## [v1.1.0]
 
-- **Dependency Updates:**
-  - `@cloudflare/workers-types` to `^4.20260506.1`
-  - `eslint` to `^10.3.0`
-  - `globals` to `^17.6.0`
-  - `typescript-eslint` to `^8.59.2`
+### Features
 
----
+- add freeze/unfreeze endpoints for instance migration v1.1.0 by **Temp** ([d559d68](https://github.com/neverinfamous/do-manager-admin-hooks/commit/d559d6872896ca27112c0acdbb52fef5c32f2ff8))
 
-## [1.1.6](https://github.com/neverinfamous/do-manager-admin-hooks/releases/tag/v1.1.6) - 2026-04-23
+### Bug Fixes
 
-### Changed
+- add NODE_AUTH_TOKEN for npm publish by **Temp** ([eecf1cb](https://github.com/neverinfamous/do-manager-admin-hooks/commit/eecf1cbf3577862c4f64567d8c05825547b8f1fd))
 
-- **Dependency Updates**:
-  - Bumped `@cloudflare/workers-types` to `^4.20260422.2`
-  - Bumped `eslint` to `^10.2.1`
-  - Bumped `globals` to `^17.5.0`
-  - Bumped `typescript` to `^6.0.3`
-  - Bumped `typescript-eslint` to `^8.59.0`
+## [v1.0.1]
 
----
+### Bug Fixes
 
-## [1.1.5](https://github.com/neverinfamous/do-manager-admin-hooks/releases/tag/v1.1.5) - 2026-04-06
-
-### Changed
-
-**Dependency Updates**
-
-- Bumped `@cloudflare/workers-types` from `4.20260317.1` to `4.20260405.1`
-- Bumped `eslint` from `10.0.3` to `10.2.0`
-- Bumped declared `typescript` range from `^5.7.2` to `^6.0.2` (previously resolved to `5.9.3`)
-- Bumped `typescript-eslint` from `8.57.1` to `8.58.0`
-
-### Security
-
-- Fixed Method Injection vulnerability in POSIX character classes in `picomatch` via exact constraint override.
-- Fixed Prototype Pollution vulnerability in `flatted` via exact constraint override.
-- Fixed Zero-step sequence process hang vulnerability in `brace-expansion` via exact constraint override (`5.0.5`).
-
----
-
-## [1.1.4](https://github.com/neverinfamous/do-manager-admin-hooks/releases/tag/v1.1.4) - 2026-03-17
-
-### Changed
-
-- **Dependency Updates**
-  - Bumped `@cloudflare/workers-types` to `^4.20260317.1`
-  - Bumped `typescript-eslint` to `^8.57.1`
-
----
-
-## [1.1.3] - 2026-03-10
-
-### Changed
-
-**Dependency Updates**
-
-- Updated `@cloudflare/workers-types` to `4.20260310.1`
-- Updated `eslint` to `10.0.3`
-- Updated `typescript-eslint` to `8.57.0`
-
----
-
-## [1.1.2] - 2026-03-01
-
-### Added
-
-- **ESLint Configuration**: Added strict TypeScript ESLint configuration matching other manager projects
-  - Strict type checking with `strictTypeChecked` and `stylisticTypeChecked` presets
-  - Added `lint`, `lint:fix`, and `check` npm scripts
-- **Type Exports**: Added `AdminHooksInstance` and `AdminHooksConstructor` types for explicit typing
-
-### Changed
-
-- **Code Quality**: Removed eslint-disable comments by properly typing the codebase
-  - Simplified `DurableObjectStorage.put()` overloads to use `unknown` instead of unnecessary generic
-  - Added explicit return type `AdminHooksConstructor` to `withAdminHooks()` function
-- **Dependencies**: Migrated ESLint from v9 to v10 (`eslint` 9.39.2 → 10.0.1, `@eslint/js` 9.39.2 → 10.0.1)
-- **Dependencies**: Updated `@cloudflare/workers-types` from 4.20260210.0 to 4.20260305.0
-- **Dependencies**: Updated `typescript-eslint` from 8.55.0 to 8.56.1
-- **Dependencies**: Updated `eslint` from 10.0.1 to 10.0.2
-- **Dependencies**: Updated `globals` from 17.3.0 to 17.4.0
-
-### Fixed
-
-- **Security**: Bumped `minimatch` override (`>=10.2.1` → `>=10.2.4`) to patch GLOBSTAR combinatorial backtracking ReDoS in transitive dependency
-
-### Documentation
-
-- Updated README and GitHub README dates
-
----
-
-## [1.1.1] - 2026-01-05
-
-### Fixed
-
-- **Routing fix** for instance name prefixes in admin paths
-  - Now supports both `/admin/export` and `/admin/:instanceName/export` formats
-  - Fixes instance migration not copying storage keys
-
----
-
-## [1.1.0] - 2026-01-05
-
-### Added
-
-- **Freeze/Unfreeze endpoints** for instance migration support
-  - `PUT /admin/:name/freeze` - Freeze instance (block writes)
-  - `DELETE /admin/:name/freeze` - Unfreeze instance (allow writes)
-  - `GET /admin/:name/freeze` - Get current freeze status
-- When frozen, `PUT`, `DELETE`, and `IMPORT` operations return `423 Locked`
-- Required for DO Manager v1.2.0 "Copy + Freeze Source" migration mode
-
----
-
-## [1.0.1] - 2025-12-01
-
-### Fixed
-
-- Minor documentation updates
-
----
-
-## [1.0.0] - 2025-11-29
-
-### Added
-
-- Initial release
-- **Storage Operations**
-  - `GET /admin/list` - List storage keys (KV) or tables (SQLite)
-  - `GET /admin/get?key=X` - Get value for a key
-  - `POST /admin/put` - Set key-value pair
-  - `POST /admin/delete` - Delete a key
-- **SQL Operations** (SQLite only)
-  - `POST /admin/sql` - Execute SQL query
-- **Alarm Operations**
-  - `GET /admin/alarm` - Get current alarm
-  - `PUT /admin/alarm` - Set alarm
-  - `DELETE /admin/alarm` - Delete alarm
-- **Bulk Operations**
-  - `GET /admin/export` - Export all storage as JSON
-  - `POST /admin/import` - Import data from JSON
-- Configuration options: `basePath`, `requireAuth`, `adminKey`
-- TypeScript support with exported types
-
----
-
-## Links
-
-- [NPM Package](https://www.npmjs.com/package/do-manager-admin-hooks)
-- [GitHub Repository](https://github.com/neverinfamous/do-manager-admin-hooks)
-- [DO Manager](https://do.adamic.tech)
+- add timing-safe auth comparison for security by **Temp** ([33c4557](https://github.com/neverinfamous/do-manager-admin-hooks/commit/33c45578c197580626c314b85ed34668995800ef))
