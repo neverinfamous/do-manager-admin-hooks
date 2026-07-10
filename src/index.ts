@@ -102,7 +102,7 @@ const AlarmPayloadSchema = z.object({
 
 const ImportPayloadSchema = z.object({
   data: z.record(z.string(), z.unknown()).refine((data) => Object.keys(data).length <= MAX_IMPORT_KEYS, {
-    message: `Payload too large. Maximum ${MAX_IMPORT_KEYS} keys per import chunk.`,
+    message: ERROR_MESSAGES.PAYLOAD_TOO_LARGE,
   }),
 });
 
@@ -135,13 +135,7 @@ const SQLITE_INTROSPECTION_QUERY = "SELECT name FROM sqlite_master WHERE type='t
  */
 function hasSqlBackend(
   storage: unknown,
-): storage is {
-  sql: {
-    exec: <T = unknown>(
-      query: string,
-    ) => { toArray: () => T[]; columnNames: string[] };
-  };
-} {
+): boolean {
   return (
     typeof storage === "object" &&
     storage !== null &&
@@ -160,6 +154,10 @@ function hasSqlBackend(
 const SYSTEM_KEY_PREFIX = "__do_manager_";
 const FROZEN_STORAGE_KEY = `${SYSTEM_KEY_PREFIX}frozen`;
 const FROZEN_AT_STORAGE_KEY = `${SYSTEM_KEY_PREFIX}frozen_at`;
+
+function isSystemKey(key: string): boolean {
+  return key.startsWith(SYSTEM_KEY_PREFIX);
+}
 
 /**
  * Cloudflare Durable Objects limit put() to 128 keys per operation
@@ -280,10 +278,14 @@ async function parseBody<T>(request: Request, schema: z.ZodType<T>, errorMessage
     const rawBody = await request.json();
     const parsed = schema.safeParse(rawBody);
     if (!parsed.success) {
-      throw new AdminError(errorMessage, HTTP_STATUS.BAD_REQUEST);
+      const issues = parsed.error.issues.map((i) => i.message).join(', ');
+      throw new AdminError(`${errorMessage}: ${issues}`, HTTP_STATUS.BAD_REQUEST);
     }
     return parsed.data;
-  } catch {
+  } catch (error) {
+    if (error instanceof AdminError) {
+      throw error;
+    }
     throw new AdminError(errorMessage, HTTP_STATUS.BAD_REQUEST);
   }
 }
@@ -455,7 +457,8 @@ export function withAdminHooks<Env = unknown>(
      * Throws an error if frozen.
      */
     async ensureNotFrozen(): Promise<void> {
-      const isFrozen = await this.state.storage.get<boolean>(FROZEN_STORAGE_KEY);
+      const isFrozenRaw = await this.state.storage.get(FROZEN_STORAGE_KEY);
+      const isFrozen = z.boolean().optional().catch(false).parse(isFrozenRaw);
       if (isFrozen) {
         throw new AdminError(
           ERROR_MESSAGES.FROZEN_INSTANCE,
@@ -468,7 +471,7 @@ export function withAdminHooks<Env = unknown>(
      * Validate key to prevent modification of internal system keys
      */
     validateKey(key: string): void {
-      if (key.startsWith(SYSTEM_KEY_PREFIX)) {
+      if (isSystemKey(key)) {
         throw new AdminError(
           ERROR_MESSAGES.SYSTEM_KEY_MODIFICATION,
           HTTP_STATUS.BAD_REQUEST
@@ -501,7 +504,7 @@ export function withAdminHooks<Env = unknown>(
       
       const entries = await this.state.storage.list(options);
       const allKeys = [...entries.keys()];
-      const keys = allKeys.filter((k) => !k.startsWith(SYSTEM_KEY_PREFIX));
+      const keys = allKeys.filter((k) => !isSystemKey(k));
       const nextCursor = allKeys.length === limit ? allKeys[allKeys.length - 1] : undefined;
       
       return { keys, cursor: nextCursor };
@@ -592,7 +595,7 @@ export function withAdminHooks<Env = unknown>(
 
       let lastKey: string | undefined;
       for (const [key, value] of entries) {
-        if (!key.startsWith(SYSTEM_KEY_PREFIX)) {
+        if (!isSystemKey(key)) {
           data[key] = value;
         }
         lastKey = key;
@@ -649,11 +652,12 @@ export function withAdminHooks<Env = unknown>(
      * Get freeze status
      */
     async adminGetFreezeStatus(): Promise<AdminFreezeResponse> {
-      const isFrozen =
-        await this.state.storage.get<boolean>(FROZEN_STORAGE_KEY);
-      const frozenAt = await this.state.storage.get<string>(
-        FROZEN_AT_STORAGE_KEY,
-      );
+      const isFrozenRaw = await this.state.storage.get(FROZEN_STORAGE_KEY);
+      const frozenAtRaw = await this.state.storage.get(FROZEN_AT_STORAGE_KEY);
+      
+      const isFrozen = z.boolean().optional().catch(false).parse(isFrozenRaw);
+      const frozenAt = z.string().optional().catch(undefined).parse(frozenAtRaw);
+      
       return { frozen: !!isFrozen, frozenAt };
     }
 
