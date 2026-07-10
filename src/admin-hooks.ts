@@ -106,8 +106,8 @@ export function withAdminHooks<Env = unknown>(
         }
       }
 
-      const adminPath = path.slice(basePath.length);
-      const operation = adminPath.startsWith("/") ? adminPath : `/${adminPath}`;
+      const pathParts = path.split('/');
+      const operation = `/${pathParts[pathParts.length - 1]}`;
 
       try {
         return await match([operation, request.method])
@@ -191,29 +191,27 @@ export function withAdminHooks<Env = unknown>(
             const timeRow = rows.find(r => r.key === FROZEN_AT_STORAGE_KEY);
             return { isFrozen: true, frozenAt: timeRow?.value };
           }
-          return { isFrozen: false };
         } catch (error) {
-          if (error instanceof Error && error.message.includes(ERROR_MESSAGES.SQLITE_NO_SUCH_TABLE)) {
-            return { isFrozen: false };
-          }
-          throw new AdminError(ERROR_MESSAGES.SQL_FAILED, HTTP_STATUS.INTERNAL_SERVER_ERROR);
-        }
-      } else {
-        const isFrozenRaw = await this.state.storage.get(FROZEN_STORAGE_KEY);
-        const frozenAtRaw = await this.state.storage.get(FROZEN_AT_STORAGE_KEY);
-        
-        let isFrozen = false;
-        if (isFrozenRaw !== undefined) {
-          const parsed = z.union([z.boolean(), z.string()]).safeParse(isFrozenRaw);
-          if (parsed.success) {
-            isFrozen = parsed.data === true || parsed.data === FROZEN_TRUE_VALUE;
+          if (error instanceof Error && !error.message.includes(ERROR_MESSAGES.SQLITE_NO_SUCH_TABLE)) {
+            throw new AdminError(ERROR_MESSAGES.SQL_FAILED, HTTP_STATUS.INTERNAL_SERVER_ERROR);
           }
         }
-        
-        const frozenAt = typeof frozenAtRaw === 'string' ? frozenAtRaw : undefined;
-        
-        return { isFrozen, frozenAt };
       }
+
+      const isFrozenRaw = await this.state.storage.get(FROZEN_STORAGE_KEY);
+      const frozenAtRaw = await this.state.storage.get(FROZEN_AT_STORAGE_KEY);
+      
+      let isFrozen = false;
+      if (isFrozenRaw !== undefined) {
+        const parsed = z.union([z.boolean(), z.string()]).safeParse(isFrozenRaw);
+        if (parsed.success) {
+          isFrozen = parsed.data === true || parsed.data === FROZEN_TRUE_VALUE;
+        }
+      }
+      
+      const frozenAt = typeof frozenAtRaw === 'string' ? frozenAtRaw : undefined;
+      
+      return { isFrozen, frozenAt };
     }
 
     /**
