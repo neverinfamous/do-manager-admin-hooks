@@ -82,10 +82,31 @@ function parseQueryParams(url: URL): ReturnType<typeof QuerySchema.safeParse> {
 }
 
 /**
+ * Query used to list all user-created tables in SQLite backend
+ */
+const SQLITE_INTROSPECTION_QUERY = "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%'";
+
+/**
  * Type guard for SQLite storage backend
  */
-function hasSqlBackend(storage: unknown): storage is { sql: { exec: <T = unknown>(query: string) => { toArray: () => T[], columnNames: string[] } } } {
-  return typeof storage === 'object' && storage !== null && 'sql' in storage;
+function hasSqlBackend(
+  storage: unknown,
+): storage is {
+  sql: {
+    exec: <T = unknown>(
+      query: string,
+    ) => { toArray: () => T[]; columnNames: string[] };
+  };
+} {
+  return (
+    typeof storage === "object" &&
+    storage !== null &&
+    "sql" in storage &&
+    typeof storage.sql === "object" &&
+    storage.sql !== null &&
+    "exec" in storage.sql &&
+    typeof storage.sql.exec === "function"
+  );
 }
 
 /**
@@ -270,7 +291,11 @@ export function withAdminHooks<Env = unknown>(
       const url = new URL(request.url);
       const path = url.pathname;
 
-      if (!path.startsWith(basePath)) {
+      const isExactMatch = path === basePath;
+      const hasTrailingSlash = basePath.endsWith('/');
+      const isNestedMatch = path.startsWith(hasTrailingSlash ? basePath : `${basePath}/`);
+
+      if (!isExactMatch && !isNestedMatch) {
         return null;
       }
 
@@ -294,8 +319,7 @@ export function withAdminHooks<Env = unknown>(
       }
 
       const adminPath = path.slice(basePath.length);
-      const pathParts = adminPath.split("/").filter(Boolean);
-      const operation = pathParts.length > 0 ? "/" + pathParts[pathParts.length - 1] : "";
+      const operation = adminPath === "" ? "/" : (adminPath.startsWith("/") ? adminPath : `/${adminPath}`);
 
       try {
         return await match([operation, request.method])
@@ -394,9 +418,7 @@ export function withAdminHooks<Env = unknown>(
     async adminList(limit = DEFAULT_LIST_LIMIT, cursor?: string): Promise<AdminListResponse> {
       // Check for SQLite backend
       if (hasSqlBackend(this.state.storage)) {
-        const result = this.state.storage.sql.exec<{ name: string }>(
-          "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%'",
-        );
+        const result = this.state.storage.sql.exec<{ name: string }>(SQLITE_INTROSPECTION_QUERY);
         return { tables: result.toArray().map((row) => row.name) };
       }
 
@@ -509,7 +531,15 @@ export function withAdminHooks<Env = unknown>(
      */
     async adminImport(data: Record<string, unknown>): Promise<void> {
       await this.ensureNotFrozen();
-      await this.state.storage.put(data);
+      
+      const entries = Object.entries(data);
+      // Cloudflare Durable Objects limit put() to 128 keys per operation
+      const BATCH_SIZE = 128;
+      
+      for (let i = 0; i < entries.length; i += BATCH_SIZE) {
+        const chunk = Object.fromEntries(entries.slice(i, i + BATCH_SIZE));
+        await this.state.storage.put(chunk);
+      }
     }
 
     /**
