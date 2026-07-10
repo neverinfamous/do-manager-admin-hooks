@@ -4,6 +4,10 @@ import { ALGO_SHA256, HTTP_STATUS, SYSTEM_KEY_PREFIX } from './constants';
 import { AdminError } from './errors';
 import type { SqlStorageBackend } from './types';
 
+export function formatZodError(error: z.ZodError): string {
+  return error.issues.map((i) => i.message).join(', ');
+}
+
 export async function timingSafeEqual(a: string, b: string): Promise<boolean> {
   const encoder = new TextEncoder();
   
@@ -25,8 +29,7 @@ export async function parseBody<T>(request: Request, schema: z.ZodType<T>, error
     const rawBody = await request.json();
     const parsed = schema.safeParse(rawBody);
     if (!parsed.success) {
-      const issues = parsed.error.issues.map((i) => i.message).join(', ');
-      throw new AdminError(`${errorMessage}: ${issues}`, HTTP_STATUS.BAD_REQUEST);
+      throw new AdminError(`${errorMessage}: ${formatZodError(parsed.error)}`, HTTP_STATUS.BAD_REQUEST);
     }
     return parsed.data;
   } catch (error) {
@@ -41,8 +44,7 @@ export function parseQuery<T>(url: URL, schema: z.ZodType<T>, errorMessage: stri
   const params = Object.fromEntries(url.searchParams.entries());
   const parsed = schema.safeParse(params);
   if (!parsed.success) {
-    const issues = parsed.error.issues.map((i) => i.message).join(', ');
-    throw new AdminError(`${errorMessage}: ${issues}`, HTTP_STATUS.BAD_REQUEST);
+    throw new AdminError(`${errorMessage}: ${formatZodError(parsed.error)}`, HTTP_STATUS.BAD_REQUEST);
   }
   return parsed.data;
 }

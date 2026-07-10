@@ -53,7 +53,13 @@ export const ERROR_MESSAGES = {
   SQLITE_CURSOR: "Invalid cursor format for SQLite backend",
   SQLITE_NO_SUCH_TABLE: "no such table",
   PAYLOAD_TOO_LARGE: "Payload too large. Maximum keys exceeded.",
-  KV_NOT_AVAILABLE: "KV operations not available - this DO uses SQL storage backend"
+  KV_NOT_AVAILABLE: "KV operations not available - this DO uses SQL storage backend",
+  KEY_EMPTY: "Key cannot be empty",
+  KEY_TOO_LARGE: "Key cannot exceed 2048 bytes",
+  VALUE_UNDEFINED: "Value cannot be undefined",
+  QUERY_EMPTY: "Query cannot be empty",
+  QUERY_TOO_LARGE: "Query too large",
+  CURSOR_TOO_LARGE: "Cursor too large"
 } as const;
 
 export const HTTP_STATUS = {

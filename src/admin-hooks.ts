@@ -330,6 +330,7 @@ export function withAdminHooks<Env = unknown>(
      */
     async adminGet(key: string): Promise<AdminGetResponse> {
       this.ensureKvBackend();
+      this.validateKey(key);
       const value = await this.state.storage.get(key);
       return { value };
     }
