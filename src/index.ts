@@ -173,7 +173,7 @@ export interface AdminHooksInstance<Env = unknown> {
   state: DurableObjectState;
   env: Env;
   handleAdminRequest(request: Request): Promise<Response | null>;
-  ensureNotFrozen(key?: string): Promise<void>;
+  ensureNotFrozen(): Promise<void>;
   adminList(limit?: number, cursor?: string): Promise<AdminListResponse>;
   adminGet(key: string): Promise<AdminGetResponse>;
   adminPut(key: string, value: unknown): Promise<void>;
@@ -418,11 +418,9 @@ export function withAdminHooks<Env = unknown>(
 
     /**
      * Helper to check if the instance is frozen.
-     * Throws an error if frozen and the operation is not on the frozen key itself.
+     * Throws an error if frozen.
      */
-    async ensureNotFrozen(key?: string): Promise<void> {
-      if (key === FROZEN_STORAGE_KEY) return;
-      
+    async ensureNotFrozen(): Promise<void> {
       const isFrozen = await this.state.storage.get<boolean>(FROZEN_STORAGE_KEY);
       if (isFrozen) {
         throw new Error(
@@ -472,18 +470,24 @@ export function withAdminHooks<Env = unknown>(
     }
 
     /**
-     * Put a storage value (blocked if frozen, unless it's the frozen key itself)
+     * Put a storage value (blocked if frozen or if attempting to modify system keys)
      */
     async adminPut(key: string, value: unknown): Promise<void> {
-      await this.ensureNotFrozen(key);
+      if (key.startsWith("__do_manager_")) {
+        throw new Error("Cannot manually modify internal system keys");
+      }
+      await this.ensureNotFrozen();
       await this.state.storage.put(key, value);
     }
 
     /**
-     * Delete a storage value (blocked if frozen, unless it's the frozen key itself)
+     * Delete a storage value (blocked if frozen or if attempting to modify system keys)
      */
     async adminDelete(key: string): Promise<void> {
-      await this.ensureNotFrozen(key);
+      if (key.startsWith("__do_manager_")) {
+        throw new Error("Cannot manually modify internal system keys");
+      }
+      await this.ensureNotFrozen();
       await this.state.storage.delete(key);
     }
 
@@ -605,6 +609,10 @@ export function withAdminHooks<Env = unknown>(
       // Handle admin requests
       const adminResponse = await this.handleAdminRequest(request);
       if (adminResponse) return adminResponse;
+
+      if (options.fallback) {
+        return await options.fallback(request);
+      }
 
       // Default response - override this in your subclass
       return new Response(
