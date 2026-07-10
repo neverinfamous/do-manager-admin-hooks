@@ -21,6 +21,8 @@ import type {
  */
 
 const ALGO_SHA256 = 'SHA-256' as const;
+const ADMIN_KEY_HEADER = "X-Admin-Key";
+const INTERNAL_SYSTEM_TABLE = "_do_manager_system";
 
 export const ERROR_MESSAGES = {
   UNAUTHORIZED: "Unauthorized",
@@ -136,7 +138,7 @@ const SQLITE_INTROSPECTION_QUERY = "SELECT name FROM sqlite_master WHERE type='t
  */
 function hasSqlBackend(
   storage: unknown,
-): boolean {
+): storage is { sql: { exec: <T = unknown>(query: string) => { toArray: () => T[], columnNames: string[] } } } {
   return (
     typeof storage === "object" &&
     storage !== null &&
@@ -365,7 +367,7 @@ export function withAdminHooks<Env = unknown>(
       }
 
       if (options.requireAuth) {
-        const providedKey = request.headers.get("X-Admin-Key") ?? "";
+        const providedKey = request.headers.get(ADMIN_KEY_HEADER) ?? "";
         const expectedKey = options.adminKey ?? "";
 
         if (!expectedKey) {
@@ -459,15 +461,14 @@ export function withAdminHooks<Env = unknown>(
     async getFreezeState(): Promise<{ isFrozen: boolean; frozenAt?: string }> {
       if (hasSqlBackend(this.state.storage)) {
         try {
-          const result = this.state.storage.sql.exec<{ value: string }>(
-            `SELECT value FROM _do_manager_system WHERE key = '${FROZEN_STORAGE_KEY}'`
+          const result = this.state.storage.sql.exec<{ key: string, value: string }>(
+            `SELECT key, value FROM ${INTERNAL_SYSTEM_TABLE} WHERE key IN ('${FROZEN_STORAGE_KEY}', '${FROZEN_AT_STORAGE_KEY}')`
           );
           const rows = result.toArray();
-          if (rows.length > 0 && rows[0]?.value === 'true') {
-            const timeResult = this.state.storage.sql.exec<{ value: string }>(
-              `SELECT value FROM _do_manager_system WHERE key = '${FROZEN_AT_STORAGE_KEY}'`
-            );
-            return { isFrozen: true, frozenAt: timeResult.toArray()[0]?.value };
+          const isFrozenRow = rows.find(r => r.key === FROZEN_STORAGE_KEY);
+          if (isFrozenRow?.value === 'true') {
+            const timeRow = rows.find(r => r.key === FROZEN_AT_STORAGE_KEY);
+            return { isFrozen: true, frozenAt: timeRow?.value };
           }
           return { isFrozen: false };
         } catch {
@@ -490,17 +491,17 @@ export function withAdminHooks<Env = unknown>(
     async setFreezeState(frozen: boolean): Promise<string | undefined> {
       if (hasSqlBackend(this.state.storage)) {
         this.state.storage.sql.exec(
-          `CREATE TABLE IF NOT EXISTS _do_manager_system (key TEXT PRIMARY KEY, value TEXT)`
+          `CREATE TABLE IF NOT EXISTS ${INTERNAL_SYSTEM_TABLE} (key TEXT PRIMARY KEY, value TEXT)`
         );
         if (frozen) {
           const frozenAt = new Date().toISOString();
           this.state.storage.sql.exec(
-            `INSERT OR REPLACE INTO _do_manager_system (key, value) VALUES ('${FROZEN_STORAGE_KEY}', 'true'), ('${FROZEN_AT_STORAGE_KEY}', '${frozenAt}')`
+            `INSERT OR REPLACE INTO ${INTERNAL_SYSTEM_TABLE} (key, value) VALUES ('${FROZEN_STORAGE_KEY}', 'true'), ('${FROZEN_AT_STORAGE_KEY}', '${frozenAt}')`
           );
           return frozenAt;
         } else {
           this.state.storage.sql.exec(
-            `DELETE FROM _do_manager_system WHERE key IN ('${FROZEN_STORAGE_KEY}', '${FROZEN_AT_STORAGE_KEY}')`
+            `DELETE FROM ${INTERNAL_SYSTEM_TABLE} WHERE key IN ('${FROZEN_STORAGE_KEY}', '${FROZEN_AT_STORAGE_KEY}')`
           );
           return undefined;
         }
@@ -515,6 +516,15 @@ export function withAdminHooks<Env = unknown>(
           await this.state.storage.delete(FROZEN_AT_STORAGE_KEY);
           return undefined;
         }
+      }
+    }
+
+    /**
+     * Helper to enforce KV backend is available
+     */
+    ensureKvBackend(): void {
+      if (hasSqlBackend(this.state.storage)) {
+        throw new AdminError(ERROR_MESSAGES.KV_NOT_AVAILABLE, HTTP_STATUS.BAD_REQUEST);
       }
     }
 
@@ -579,9 +589,7 @@ export function withAdminHooks<Env = unknown>(
      * Get a single storage value
      */
     async adminGet(key: string): Promise<AdminGetResponse> {
-      if (hasSqlBackend(this.state.storage)) {
-        throw new AdminError(ERROR_MESSAGES.KV_NOT_AVAILABLE, HTTP_STATUS.BAD_REQUEST);
-      }
+      this.ensureKvBackend();
       const value = await this.state.storage.get(key);
       return { value };
     }
@@ -590,9 +598,7 @@ export function withAdminHooks<Env = unknown>(
      * Put a storage value (blocked if frozen or if attempting to modify system keys)
      */
     async adminPut(key: string, value: unknown): Promise<void> {
-      if (hasSqlBackend(this.state.storage)) {
-        throw new AdminError(ERROR_MESSAGES.KV_NOT_AVAILABLE, HTTP_STATUS.BAD_REQUEST);
-      }
+      this.ensureKvBackend();
       this.validateKey(key);
       await this.ensureNotFrozen();
       await this.state.storage.put(key, value);
@@ -602,9 +608,7 @@ export function withAdminHooks<Env = unknown>(
      * Delete a storage value (blocked if frozen or if attempting to modify system keys)
      */
     async adminDelete(key: string): Promise<void> {
-      if (hasSqlBackend(this.state.storage)) {
-        throw new AdminError(ERROR_MESSAGES.KV_NOT_AVAILABLE, HTTP_STATUS.BAD_REQUEST);
-      }
+      this.ensureKvBackend();
       this.validateKey(key);
       await this.ensureNotFrozen();
       await this.state.storage.delete(key);
@@ -663,9 +667,7 @@ export function withAdminHooks<Env = unknown>(
      * Export all storage data
      */
     async adminExport(limit = DEFAULT_LIST_LIMIT, cursor?: string): Promise<AdminExportResponse> {
-      if (hasSqlBackend(this.state.storage)) {
-        throw new AdminError(ERROR_MESSAGES.KV_NOT_AVAILABLE, HTTP_STATUS.BAD_REQUEST);
-      }
+      this.ensureKvBackend();
       const options = buildListOptions(limit, cursor);
       const entries = await this.state.storage.list(options);
       const data: Record<string, unknown> = {};
@@ -692,9 +694,7 @@ export function withAdminHooks<Env = unknown>(
      * Import data (merge with existing) - blocked if frozen
      */
     async adminImport(data: Record<string, unknown>): Promise<void> {
-      if (hasSqlBackend(this.state.storage)) {
-        throw new AdminError(ERROR_MESSAGES.KV_NOT_AVAILABLE, HTTP_STATUS.BAD_REQUEST);
-      }
+      this.ensureKvBackend();
       await this.ensureNotFrozen();
 
       for (const key of Object.keys(data)) {
