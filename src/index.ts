@@ -1,5 +1,9 @@
 import { z } from 'zod';
 import { match } from 'ts-pattern';
+import type { 
+  DurableObjectState, 
+  DurableObjectListOptions 
+} from '@cloudflare/workers-types';
 
 /**
  * @do-manager/admin-hooks
@@ -15,61 +19,6 @@ import { match } from 'ts-pattern';
  * }
  * ```
  */
-
-// Type definitions for Durable Object context
-interface DurableObjectState {
-  storage: DurableObjectStorage;
-  id: DurableObjectId;
-  waitUntil(promise: Promise<unknown>): void;
-}
-
-interface SqlStorage {
-  exec<T = Record<string, unknown>>(
-    query: string,
-    ...params: unknown[]
-  ): SqlStorageResult<T>;
-}
-
-interface SqlStorageResult<T> {
-  toArray(): T[];
-  one(): T | null;
-  raw(): unknown[][];
-  columnNames: string[];
-  rowsRead: number;
-  rowsWritten: number;
-}
-
-interface DurableObjectStorage {
-  get<T = unknown>(key: string): Promise<T | undefined>;
-  get<T = unknown>(keys: string[]): Promise<Map<string, T>>;
-  put(key: string, value: unknown): Promise<void>;
-  put(entries: Record<string, unknown>): Promise<void>;
-  delete(key: string): Promise<boolean>;
-  delete(keys: string[]): Promise<number>;
-  deleteAll(): Promise<void>;
-  list<T = unknown>(
-    options?: DurableObjectStorageListOptions,
-  ): Promise<Map<string, T>>;
-  getAlarm(): Promise<number | null>;
-  setAlarm(scheduledTime: number | Date): Promise<void>;
-  deleteAlarm(): Promise<void>;
-  sql?: SqlStorage;
-}
-
-interface DurableObjectStorageListOptions {
-  start?: string;
-  startAfter?: string;
-  end?: string;
-  prefix?: string;
-  reverse?: boolean;
-  limit?: number;
-}
-
-interface DurableObjectId {
-  toString(): string;
-  equals(other: DurableObjectId): boolean;
-  name?: string;
-}
 
 /**
  * Timing-safe string comparison to prevent timing attacks
@@ -115,11 +64,17 @@ const ImportPayloadSchema = z.object({
   data: z.record(z.string(), z.unknown()),
 });
 
+const QuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(5000).optional(),
+  cursor: z.string().optional(),
+});
+
 /**
  * Special storage key used to mark an instance as frozen (read-only)
  * When set to true, all put/delete operations are blocked
  */
 const FROZEN_STORAGE_KEY = "__do_manager_frozen";
+const FROZEN_AT_STORAGE_KEY = "__do_manager_frozen_at";
 
 /**
  * Default limit for list and export operations
@@ -164,9 +119,9 @@ interface AdminFreezeResponse {
 /**
  * Interface representing an instance of AdminHooksDurableObject
  */
-export interface AdminHooksInstance {
+export interface AdminHooksInstance<Env = unknown> {
   state: DurableObjectState;
-  env: unknown;
+  env: Env;
   handleAdminRequest(request: Request): Promise<Response | null>;
   ensureNotFrozen(key?: string): Promise<void>;
   adminList(limit?: number, cursor?: string): Promise<AdminListResponse>;
@@ -189,10 +144,10 @@ export interface AdminHooksInstance {
 /**
  * Constructor type for AdminHooksDurableObject class
  */
-export type AdminHooksConstructor = new (
+export type AdminHooksConstructor<Env = unknown> = new (
   state: DurableObjectState,
-  env: unknown,
-) => AdminHooksInstance;
+  env: Env,
+) => AdminHooksInstance<Env>;
 
 /**
  * Configuration options for admin hooks
@@ -274,16 +229,16 @@ async function safeParseJson(request: Request): Promise<unknown> {
  * }
  * ```
  */
-export function withAdminHooks(
+export function withAdminHooks<Env = unknown>(
   options: AdminHooksOptions = {},
-): AdminHooksConstructor {
+): AdminHooksConstructor<Env> {
   const basePath = options.basePath ?? "/admin";
 
   class AdminHooksDurableObject {
     state: DurableObjectState;
-    env: unknown;
+    env: Env;
 
-    constructor(state: DurableObjectState, env: unknown) {
+    constructor(state: DurableObjectState, env: Env) {
       this.state = state;
       this.env = env;
     }
@@ -328,8 +283,9 @@ export function withAdminHooks(
           .with(["/list", "GET"], async () => {
             const limitParam = url.searchParams.get("limit");
             const cursor = url.searchParams.get("cursor") ?? undefined;
-            const limit = limitParam ? parseInt(limitParam, 10) : undefined;
-            return Response.json(await this.adminList(limit, cursor));
+            const parsed = QuerySchema.safeParse({ limit: limitParam, cursor });
+            if (!parsed.success) return createErrorResponse("Invalid limit or cursor");
+            return Response.json(await this.adminList(parsed.data.limit, parsed.data.cursor));
           })
           .with(["/get", "GET"], async () => {
             const key = url.searchParams.get("key");
@@ -382,8 +338,9 @@ export function withAdminHooks(
           .with(["/export", "GET"], async () => {
             const limitParam = url.searchParams.get("limit");
             const cursor = url.searchParams.get("cursor") ?? undefined;
-            const limit = limitParam ? parseInt(limitParam, 10) : undefined;
-            return Response.json(await this.adminExport(limit, cursor));
+            const parsed = QuerySchema.safeParse({ limit: limitParam, cursor });
+            if (!parsed.success) return createErrorResponse("Invalid limit or cursor");
+            return Response.json(await this.adminExport(parsed.data.limit, parsed.data.cursor));
           })
           .with(["/import", "POST"], async () => {
             const rawBody = await safeParseJson(request);
@@ -421,7 +378,8 @@ export function withAdminHooks(
      */
     async adminList(limit = DEFAULT_LIST_LIMIT, cursor?: string): Promise<AdminListResponse> {
       // Check for SQLite backend
-      if (this.state.storage.sql) {
+      const storageDict = this.state.storage as unknown as { sql?: unknown };
+      if (storageDict.sql !== undefined) {
         const result = this.state.storage.sql.exec<{ name: string }>(
           "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%'",
         );
@@ -429,7 +387,7 @@ export function withAdminHooks(
       }
 
       // KV backend
-      const options: DurableObjectStorageListOptions = { limit };
+      const options: DurableObjectListOptions = { limit };
       if (cursor) {
         options.startAfter = cursor;
       }
@@ -469,7 +427,8 @@ export function withAdminHooks(
      * Execute SQL query (SQLite backend only)
      */
     adminSql(query: string): AdminSqlResponse {
-      if (!this.state.storage.sql) {
+      const storageDict = this.state.storage as unknown as { sql?: unknown };
+      if (storageDict.sql === undefined) {
         throw new Error("SQL not available - this DO uses KV storage backend");
       }
 
@@ -509,7 +468,7 @@ export function withAdminHooks(
      * Export all storage data
      */
     async adminExport(limit = DEFAULT_LIST_LIMIT, cursor?: string): Promise<AdminExportResponse> {
-      const options: DurableObjectStorageListOptions = { limit };
+      const options: DurableObjectListOptions = { limit };
       if (cursor) {
         options.startAfter = cursor;
       }
@@ -546,7 +505,7 @@ export function withAdminHooks(
     async adminFreeze(): Promise<AdminFreezeResponse> {
       const frozenAt = new Date().toISOString();
       await this.state.storage.put(FROZEN_STORAGE_KEY, true);
-      await this.state.storage.put(`${FROZEN_STORAGE_KEY}_at`, frozenAt);
+      await this.state.storage.put(FROZEN_AT_STORAGE_KEY, frozenAt);
       return { frozen: true, frozenAt };
     }
 
@@ -555,7 +514,7 @@ export function withAdminHooks(
      */
     async adminUnfreeze(): Promise<AdminFreezeResponse> {
       await this.state.storage.delete(FROZEN_STORAGE_KEY);
-      await this.state.storage.delete(`${FROZEN_STORAGE_KEY}_at`);
+      await this.state.storage.delete(FROZEN_AT_STORAGE_KEY);
       return { frozen: false };
     }
 
@@ -566,7 +525,7 @@ export function withAdminHooks(
       const isFrozen =
         await this.state.storage.get<boolean>(FROZEN_STORAGE_KEY);
       const frozenAt = await this.state.storage.get<string>(
-        `${FROZEN_STORAGE_KEY}_at`,
+        FROZEN_AT_STORAGE_KEY,
       );
       return { frozen: !!isFrozen, frozenAt: frozenAt ?? undefined };
     }
