@@ -51,9 +51,11 @@
     "@eslint/js": "^10.0.1",
     "eslint": "^10.3.0",
     "globals": "^17.6.0",
+    "ts-pattern": "^5.9.0",
     "tsup": "^8.3.5",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.59.3"
+    "typescript-eslint": "^8.59.3",
+    "zod": "^4.4.3"
   },
   "peerDependencies": {
     "@cloudflare/workers-types": ">=4.0.0"
