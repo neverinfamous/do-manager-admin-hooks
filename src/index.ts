@@ -39,7 +39,8 @@ export const ERROR_MESSAGES = {
   SQL_NOT_AVAILABLE: "SQL not available - this DO uses KV storage backend",
   SQL_FAILED: "SQL execution failed",
   SQLITE_CURSOR: "Invalid cursor format for SQLite backend",
-  PAYLOAD_TOO_LARGE: "Payload too large. Maximum keys exceeded."
+  PAYLOAD_TOO_LARGE: "Payload too large. Maximum keys exceeded.",
+  KV_NOT_AVAILABLE: "KV operations not available - this DO uses SQL storage backend"
 } as const;
 
 /**
@@ -453,12 +454,76 @@ export function withAdminHooks<Env = unknown>(
     }
 
     /**
+     * Internal helper to get freeze state across both KV and SQL backends.
+     */
+    async getFreezeState(): Promise<{ isFrozen: boolean; frozenAt?: string }> {
+      if (hasSqlBackend(this.state.storage)) {
+        try {
+          const result = this.state.storage.sql.exec<{ value: string }>(
+            `SELECT value FROM _do_manager_system WHERE key = '${FROZEN_STORAGE_KEY}'`
+          );
+          const rows = result.toArray();
+          if (rows.length > 0 && rows[0]?.value === 'true') {
+            const timeResult = this.state.storage.sql.exec<{ value: string }>(
+              `SELECT value FROM _do_manager_system WHERE key = '${FROZEN_AT_STORAGE_KEY}'`
+            );
+            return { isFrozen: true, frozenAt: timeResult.toArray()[0]?.value };
+          }
+          return { isFrozen: false };
+        } catch {
+          return { isFrozen: false };
+        }
+      } else {
+        const isFrozenRaw = await this.state.storage.get(FROZEN_STORAGE_KEY);
+        const frozenAtRaw = await this.state.storage.get(FROZEN_AT_STORAGE_KEY);
+        
+        const isFrozen = z.boolean().optional().catch(false).parse(isFrozenRaw);
+        const frozenAt = z.string().optional().catch(undefined).parse(frozenAtRaw);
+        
+        return { isFrozen: !!isFrozen, frozenAt };
+      }
+    }
+
+    /**
+     * Internal helper to set freeze state across both KV and SQL backends.
+     */
+    async setFreezeState(frozen: boolean): Promise<string | undefined> {
+      if (hasSqlBackend(this.state.storage)) {
+        this.state.storage.sql.exec(
+          `CREATE TABLE IF NOT EXISTS _do_manager_system (key TEXT PRIMARY KEY, value TEXT)`
+        );
+        if (frozen) {
+          const frozenAt = new Date().toISOString();
+          this.state.storage.sql.exec(
+            `INSERT OR REPLACE INTO _do_manager_system (key, value) VALUES ('${FROZEN_STORAGE_KEY}', 'true'), ('${FROZEN_AT_STORAGE_KEY}', '${frozenAt}')`
+          );
+          return frozenAt;
+        } else {
+          this.state.storage.sql.exec(
+            `DELETE FROM _do_manager_system WHERE key IN ('${FROZEN_STORAGE_KEY}', '${FROZEN_AT_STORAGE_KEY}')`
+          );
+          return undefined;
+        }
+      } else {
+        if (frozen) {
+          const frozenAt = new Date().toISOString();
+          await this.state.storage.put(FROZEN_STORAGE_KEY, true);
+          await this.state.storage.put(FROZEN_AT_STORAGE_KEY, frozenAt);
+          return frozenAt;
+        } else {
+          await this.state.storage.delete(FROZEN_STORAGE_KEY);
+          await this.state.storage.delete(FROZEN_AT_STORAGE_KEY);
+          return undefined;
+        }
+      }
+    }
+
+    /**
      * Helper to check if the instance is frozen.
      * Throws an error if frozen.
      */
     async ensureNotFrozen(): Promise<void> {
-      const isFrozenRaw = await this.state.storage.get(FROZEN_STORAGE_KEY);
-      const isFrozen = z.boolean().optional().catch(false).parse(isFrozenRaw);
+      const { isFrozen } = await this.getFreezeState();
       if (isFrozen) {
         throw new AdminError(
           ERROR_MESSAGES.FROZEN_INSTANCE,
@@ -514,6 +579,9 @@ export function withAdminHooks<Env = unknown>(
      * Get a single storage value
      */
     async adminGet(key: string): Promise<AdminGetResponse> {
+      if (hasSqlBackend(this.state.storage)) {
+        throw new AdminError(ERROR_MESSAGES.KV_NOT_AVAILABLE, HTTP_STATUS.BAD_REQUEST);
+      }
       const value = await this.state.storage.get(key);
       return { value };
     }
@@ -522,6 +590,9 @@ export function withAdminHooks<Env = unknown>(
      * Put a storage value (blocked if frozen or if attempting to modify system keys)
      */
     async adminPut(key: string, value: unknown): Promise<void> {
+      if (hasSqlBackend(this.state.storage)) {
+        throw new AdminError(ERROR_MESSAGES.KV_NOT_AVAILABLE, HTTP_STATUS.BAD_REQUEST);
+      }
       this.validateKey(key);
       await this.ensureNotFrozen();
       await this.state.storage.put(key, value);
@@ -531,6 +602,9 @@ export function withAdminHooks<Env = unknown>(
      * Delete a storage value (blocked if frozen or if attempting to modify system keys)
      */
     async adminDelete(key: string): Promise<void> {
+      if (hasSqlBackend(this.state.storage)) {
+        throw new AdminError(ERROR_MESSAGES.KV_NOT_AVAILABLE, HTTP_STATUS.BAD_REQUEST);
+      }
       this.validateKey(key);
       await this.ensureNotFrozen();
       await this.state.storage.delete(key);
@@ -589,6 +663,9 @@ export function withAdminHooks<Env = unknown>(
      * Export all storage data
      */
     async adminExport(limit = DEFAULT_LIST_LIMIT, cursor?: string): Promise<AdminExportResponse> {
+      if (hasSqlBackend(this.state.storage)) {
+        throw new AdminError(ERROR_MESSAGES.KV_NOT_AVAILABLE, HTTP_STATUS.BAD_REQUEST);
+      }
       const options = buildListOptions(limit, cursor);
       const entries = await this.state.storage.list(options);
       const data: Record<string, unknown> = {};
@@ -615,6 +692,9 @@ export function withAdminHooks<Env = unknown>(
      * Import data (merge with existing) - blocked if frozen
      */
     async adminImport(data: Record<string, unknown>): Promise<void> {
+      if (hasSqlBackend(this.state.storage)) {
+        throw new AdminError(ERROR_MESSAGES.KV_NOT_AVAILABLE, HTTP_STATUS.BAD_REQUEST);
+      }
       await this.ensureNotFrozen();
 
       for (const key of Object.keys(data)) {
@@ -624,7 +704,7 @@ export function withAdminHooks<Env = unknown>(
       const entries = Object.entries(data);
       
       for (let i = 0; i < entries.length; i += BATCH_SIZE) {
-        const chunk = Object.fromEntries(entries.slice(i, i + BATCH_SIZE));
+        const chunk: Record<string, unknown> = Object.fromEntries(entries.slice(i, i + BATCH_SIZE));
         await this.state.storage.put(chunk);
       }
     }
@@ -633,9 +713,7 @@ export function withAdminHooks<Env = unknown>(
      * Freeze the instance (set read-only mode)
      */
     async adminFreeze(): Promise<AdminFreezeResponse> {
-      const frozenAt = new Date().toISOString();
-      await this.state.storage.put(FROZEN_STORAGE_KEY, true);
-      await this.state.storage.put(FROZEN_AT_STORAGE_KEY, frozenAt);
+      const frozenAt = await this.setFreezeState(true);
       return { frozen: true, frozenAt };
     }
 
@@ -643,8 +721,7 @@ export function withAdminHooks<Env = unknown>(
      * Unfreeze the instance (remove read-only mode)
      */
     async adminUnfreeze(): Promise<AdminFreezeResponse> {
-      await this.state.storage.delete(FROZEN_STORAGE_KEY);
-      await this.state.storage.delete(FROZEN_AT_STORAGE_KEY);
+      await this.setFreezeState(false);
       return { frozen: false };
     }
 
@@ -652,13 +729,8 @@ export function withAdminHooks<Env = unknown>(
      * Get freeze status
      */
     async adminGetFreezeStatus(): Promise<AdminFreezeResponse> {
-      const isFrozenRaw = await this.state.storage.get(FROZEN_STORAGE_KEY);
-      const frozenAtRaw = await this.state.storage.get(FROZEN_AT_STORAGE_KEY);
-      
-      const isFrozen = z.boolean().optional().catch(false).parse(isFrozenRaw);
-      const frozenAt = z.string().optional().catch(undefined).parse(frozenAtRaw);
-      
-      return { frozen: !!isFrozen, frozenAt };
+      const { isFrozen, frozenAt } = await this.getFreezeState();
+      return { frozen: isFrozen, frozenAt };
     }
 
     /**
