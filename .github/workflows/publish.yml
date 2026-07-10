@@ -11,7 +11,6 @@ jobs:
     environment: npm
     permissions:
       contents: read
-      id-token: write # Required for OIDC / Trusted Publisher
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
 
