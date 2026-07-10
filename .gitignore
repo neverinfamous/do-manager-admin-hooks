@@ -1,8 +1,8 @@
 # Dependencies
 node_modules/
 
-# Build output (include in git for npm publish)
-# dist/
+# Build output
+dist/
 
 # Environment files
 .env
@@ -11,7 +11,6 @@ node_modules/
 
 # IDE
 .idea/
-.vscode/
 *.swp
 *.swo
 
@@ -26,3 +25,5 @@ yarn-error.log*
 
 # TypeScript cache
 *.tsbuildinfo
+
+.agents/
