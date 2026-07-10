@@ -32,6 +32,8 @@ export const CONTENT_TYPES = {
 
 export const SUCCESS_RESPONSE = { success: true } as const;
 
+export const FALLBACK_RESPONSE_TEXT = "Durable Object with admin hooks enabled. Override fetch() to add your logic.";
+
 export const ERROR_MESSAGES = {
   UNAUTHORIZED: "Unauthorized",
   MISSING_ADMIN_KEY: "Server misconfiguration: adminKey is required when requireAuth is enabled",

@@ -2,12 +2,12 @@ import { z } from 'zod';
 import { MAX_LIST_LIMIT, MAX_IMPORT_KEYS, ERROR_MESSAGES } from './constants';
 
 export const PutPayloadSchema: z.ZodType<{ key: string; value: unknown }> = z.object({
-  key: z.string().min(1, 'Key cannot be empty').max(2048, 'Key cannot exceed 2048 bytes'),
+  key: z.string().min(1, 'Key cannot be empty').refine(val => new TextEncoder().encode(val).length <= 2048, 'Key cannot exceed 2048 bytes'),
   value: z.unknown(),
 });
 
 export const DeletePayloadSchema: z.ZodType<{ key: string }> = z.object({
-  key: z.string().min(1, 'Key cannot be empty').max(2048, 'Key cannot exceed 2048 bytes'),
+  key: z.string().min(1, 'Key cannot be empty').refine(val => new TextEncoder().encode(val).length <= 2048, 'Key cannot exceed 2048 bytes'),
 });
 
 export const SqlPayloadSchema: z.ZodType<{ query: string }> = z.object({
@@ -19,18 +19,21 @@ export const AlarmPayloadSchema: z.ZodType<{ timestamp: number }> = z.object({
 });
 
 export const ImportPayloadSchema: z.ZodType<{ data: Record<string, unknown> }> = z.object({
-  data: z.record(z.string(), z.unknown()).refine((data) => Object.keys(data).length <= MAX_IMPORT_KEYS, {
+  data: z.record(
+    z.string().min(1, 'Key cannot be empty').refine(val => new TextEncoder().encode(val).length <= 2048, 'Key cannot exceed 2048 bytes'), 
+    z.unknown()
+  ).refine((data) => Object.keys(data).length <= MAX_IMPORT_KEYS, {
     message: ERROR_MESSAGES.PAYLOAD_TOO_LARGE,
   }),
 });
 
 export const QuerySchema: z.ZodType<{ limit?: number; cursor?: string }> = z.object({
   limit: z.coerce.number().int().min(1).max(MAX_LIST_LIMIT).optional(),
-  cursor: z.string().optional(),
+  cursor: z.string().max(4096, 'Cursor too large').optional(),
 });
 
 export const GetQuerySchema: z.ZodType<{ key: string }> = z.object({
-  key: z.string().min(1, 'Key cannot be empty').max(2048, 'Key cannot exceed 2048 bytes'),
+  key: z.string().min(1, 'Key cannot be empty').refine(val => new TextEncoder().encode(val).length <= 2048, 'Key cannot exceed 2048 bytes'),
 });
 
 export const SqlFreezeRowSchema: z.ZodType<{ key: string; value: string }> = z.object({

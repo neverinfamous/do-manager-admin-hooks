@@ -16,7 +16,8 @@ import {
   ROUTES,
   DEFAULT_BASE_PATH,
   CONTENT_TYPES,
-  SUCCESS_RESPONSE
+  SUCCESS_RESPONSE,
+  FALLBACK_RESPONSE_TEXT
 } from './constants';
 import type { 
   AdminHooksConstructor, 
@@ -227,28 +228,26 @@ export function withAdminHooks<Env = unknown>(
         sql.exec(
           `CREATE TABLE IF NOT EXISTS ${INTERNAL_SYSTEM_TABLE} (key TEXT PRIMARY KEY, value TEXT)`
         );
-        if (frozen && frozenAt) {
+        if (frozenAt) {
           sql.exec(
             `INSERT OR REPLACE INTO ${INTERNAL_SYSTEM_TABLE} (key, value) VALUES ('${FROZEN_STORAGE_KEY}', '${FROZEN_TRUE_VALUE}'), ('${FROZEN_AT_STORAGE_KEY}', '${frozenAt}')`
           );
-          return frozenAt;
         } else {
           sql.exec(
             `DELETE FROM ${INTERNAL_SYSTEM_TABLE} WHERE key IN ('${FROZEN_STORAGE_KEY}', '${FROZEN_AT_STORAGE_KEY}')`
           );
-          return undefined;
         }
       } else {
-        if (frozen && frozenAt) {
+        if (frozenAt) {
           await this.state.storage.put(FROZEN_STORAGE_KEY, FROZEN_TRUE_VALUE);
           await this.state.storage.put(FROZEN_AT_STORAGE_KEY, frozenAt);
-          return frozenAt;
         } else {
           await this.state.storage.delete(FROZEN_STORAGE_KEY);
           await this.state.storage.delete(FROZEN_AT_STORAGE_KEY);
-          return undefined;
         }
       }
+      
+      return frozenAt;
     }
 
     /**
@@ -491,7 +490,7 @@ export function withAdminHooks<Env = unknown>(
 
       // Default response - override this in your subclass
       return new Response(
-        "Durable Object with admin hooks enabled. Override fetch() to add your logic.",
+        FALLBACK_RESPONSE_TEXT,
         {
           headers: { "Content-Type": CONTENT_TYPES.TEXT },
         },
