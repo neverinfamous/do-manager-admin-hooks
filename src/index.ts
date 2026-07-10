@@ -86,11 +86,6 @@ function timingSafeEqual(a: string, b: string): boolean {
 
 
 
-/**
- * Special storage key used to mark an instance as frozen (read-only)
- * When set to true, all put/delete operations are blocked
- */
-
 export const HTTP_STATUS = {
   OK: 200,
   BAD_REQUEST: 400,
@@ -113,14 +108,23 @@ const SqlPayloadSchema = z.object({
 });
 
 const AlarmPayloadSchema = z.object({
-  timestamp: z.number(),
+  timestamp: z.number().int().nonnegative(),
 });
 
 const ImportPayloadSchema = z.object({
   data: z.record(z.string(), z.unknown()),
 });
 
+/**
+ * Special storage key used to mark an instance as frozen (read-only)
+ * When set to true, all put/delete operations are blocked
+ */
 const FROZEN_STORAGE_KEY = "__do_manager_frozen";
+
+/**
+ * Default limit for list and export operations
+ */
+const DEFAULT_LIST_LIMIT = 1000;
 
 /**
  * Admin hook response types
@@ -300,6 +304,13 @@ export function withAdminHooks(
         const providedKey = request.headers.get("X-Admin-Key") ?? "";
         const expectedKey = options.adminKey ?? "";
 
+        if (!expectedKey) {
+          return createErrorResponse(
+            "Server misconfiguration: adminKey is required when requireAuth is enabled",
+            HTTP_STATUS.INTERNAL_SERVER_ERROR,
+          );
+        }
+
         if (
           providedKey.length !== expectedKey.length ||
           !timingSafeEqual(providedKey, expectedKey)
@@ -408,7 +419,7 @@ export function withAdminHooks(
     /**
      * List all storage keys or SQL tables
      */
-    async adminList(limit = 1000, cursor?: string): Promise<AdminListResponse> {
+    async adminList(limit = DEFAULT_LIST_LIMIT, cursor?: string): Promise<AdminListResponse> {
       // Check for SQLite backend
       if (this.state.storage.sql) {
         const result = this.state.storage.sql.exec<{ name: string }>(
@@ -497,7 +508,7 @@ export function withAdminHooks(
     /**
      * Export all storage data
      */
-    async adminExport(limit = 1000, cursor?: string): Promise<AdminExportResponse> {
+    async adminExport(limit = DEFAULT_LIST_LIMIT, cursor?: string): Promise<AdminExportResponse> {
       const options: DurableObjectStorageListOptions = { limit };
       if (cursor) {
         options.startAfter = cursor;
