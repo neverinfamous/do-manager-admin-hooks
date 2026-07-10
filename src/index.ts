@@ -40,7 +40,15 @@ async function timingSafeEqual(a: string, b: string): Promise<boolean> {
   return result === 0;
 }
 
-
+class AdminError extends Error {
+  constructor(
+    message: string,
+    public status: number,
+  ) {
+    super(message);
+    this.name = "AdminError";
+  }
+}
 
 export const HTTP_STATUS = {
   OK: 200,
@@ -412,6 +420,9 @@ export function withAdminHooks<Env = unknown>(
             return createErrorResponse("Unknown admin endpoint", HTTP_STATUS.NOT_FOUND);
           });
       } catch (error) {
+        if (error instanceof AdminError) {
+          return createErrorResponse(error.message, error.status);
+        }
         const message = error instanceof Error ? error.message : "Unknown error";
         return createErrorResponse(message, HTTP_STATUS.INTERNAL_SERVER_ERROR);
       }
@@ -424,8 +435,21 @@ export function withAdminHooks<Env = unknown>(
     async ensureNotFrozen(): Promise<void> {
       const isFrozen = await this.state.storage.get<boolean>(FROZEN_STORAGE_KEY);
       if (isFrozen) {
-        throw new Error(
+        throw new AdminError(
           "Instance is frozen. Unfreeze before making changes.",
+          HTTP_STATUS.BAD_REQUEST
+        );
+      }
+    }
+
+    /**
+     * Validate key to prevent modification of internal system keys
+     */
+    validateKey(key: string): void {
+      if (key.startsWith(SYSTEM_KEY_PREFIX)) {
+        throw new AdminError(
+          "Cannot manually modify internal system keys",
+          HTTP_STATUS.BAD_REQUEST
         );
       }
     }
@@ -456,8 +480,9 @@ export function withAdminHooks<Env = unknown>(
       const options = buildListOptions(limit, cursor);
       
       const entries = await this.state.storage.list(options);
-      const keys = [...entries.keys()];
-      const nextCursor = keys.length === limit ? keys[keys.length - 1] : undefined;
+      const allKeys = [...entries.keys()];
+      const keys = allKeys.filter((k) => !k.startsWith(SYSTEM_KEY_PREFIX));
+      const nextCursor = allKeys.length === limit ? allKeys[allKeys.length - 1] : undefined;
       
       return { keys, cursor: nextCursor };
     }
@@ -474,9 +499,7 @@ export function withAdminHooks<Env = unknown>(
      * Put a storage value (blocked if frozen or if attempting to modify system keys)
      */
     async adminPut(key: string, value: unknown): Promise<void> {
-      if (key.startsWith(SYSTEM_KEY_PREFIX)) {
-        throw new Error("Cannot manually modify internal system keys");
-      }
+      this.validateKey(key);
       await this.ensureNotFrozen();
       await this.state.storage.put(key, value);
     }
@@ -485,9 +508,7 @@ export function withAdminHooks<Env = unknown>(
      * Delete a storage value (blocked if frozen or if attempting to modify system keys)
      */
     async adminDelete(key: string): Promise<void> {
-      if (key.startsWith(SYSTEM_KEY_PREFIX)) {
-        throw new Error("Cannot manually modify internal system keys");
-      }
+      this.validateKey(key);
       await this.ensureNotFrozen();
       await this.state.storage.delete(key);
     }
@@ -497,7 +518,7 @@ export function withAdminHooks<Env = unknown>(
      */
     adminSql(query: string): AdminSqlResponse {
       if (!hasSqlBackend(this.state.storage)) {
-        throw new Error("SQL not available - this DO uses KV storage backend");
+        throw new AdminError("SQL not available - this DO uses KV storage backend", HTTP_STATUS.BAD_REQUEST);
       }
 
       const result = this.state.storage.sql.exec(query);
@@ -544,7 +565,9 @@ export function withAdminHooks<Env = unknown>(
 
       let lastKey: string | undefined;
       for (const [key, value] of entries) {
-        data[key] = value;
+        if (!key.startsWith(SYSTEM_KEY_PREFIX)) {
+          data[key] = value;
+        }
         lastKey = key;
       }
 
@@ -553,7 +576,7 @@ export function withAdminHooks<Env = unknown>(
       return {
         data,
         exportedAt: new Date().toISOString(),
-        keyCount: entries.size,
+        keyCount: Object.keys(data).length,
         cursor: nextCursor,
       };
     }
@@ -564,6 +587,10 @@ export function withAdminHooks<Env = unknown>(
     async adminImport(data: Record<string, unknown>): Promise<void> {
       await this.ensureNotFrozen();
       
+      for (const key of Object.keys(data)) {
+        this.validateKey(key);
+      }
+
       const entries = Object.entries(data);
       
       for (let i = 0; i < entries.length; i += BATCH_SIZE) {
