@@ -2,16 +2,16 @@ import { z } from 'zod';
 import { MAX_LIST_LIMIT, MAX_IMPORT_KEYS, ERROR_MESSAGES } from './constants';
 
 export const PutPayloadSchema: z.ZodType<{ key: string; value: unknown }> = z.object({
-  key: z.string().min(1, 'Key cannot be empty'),
+  key: z.string().min(1, 'Key cannot be empty').max(2048, 'Key cannot exceed 2048 bytes'),
   value: z.unknown(),
 });
 
 export const DeletePayloadSchema: z.ZodType<{ key: string }> = z.object({
-  key: z.string().min(1, 'Key cannot be empty'),
+  key: z.string().min(1, 'Key cannot be empty').max(2048, 'Key cannot exceed 2048 bytes'),
 });
 
 export const SqlPayloadSchema: z.ZodType<{ query: string }> = z.object({
-  query: z.string().min(1, 'Query cannot be empty'),
+  query: z.string().min(1, 'Query cannot be empty').max(100000, 'Query too large'),
 });
 
 export const AlarmPayloadSchema: z.ZodType<{ timestamp: number }> = z.object({
@@ -30,7 +30,7 @@ export const QuerySchema: z.ZodType<{ limit?: number; cursor?: string }> = z.obj
 });
 
 export const GetQuerySchema: z.ZodType<{ key: string }> = z.object({
-  key: z.string().min(1, 'Key cannot be empty'),
+  key: z.string().min(1, 'Key cannot be empty').max(2048, 'Key cannot exceed 2048 bytes'),
 });
 
 export const SqlFreezeRowSchema: z.ZodType<{ key: string; value: string }> = z.object({
