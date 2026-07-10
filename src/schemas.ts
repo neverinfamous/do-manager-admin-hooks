@@ -3,7 +3,7 @@ import { MAX_LIST_LIMIT, MAX_IMPORT_KEYS, ERROR_MESSAGES, MAX_KEY_BYTES, MAX_SQL
 
 export const PutPayloadSchema: z.ZodType<{ key: string; value: unknown }> = z.object({
   key: z.string().min(1, 'Key cannot be empty').refine(val => new TextEncoder().encode(val).length <= MAX_KEY_BYTES, `Key cannot exceed ${MAX_KEY_BYTES} bytes`),
-  value: z.unknown(),
+  value: z.unknown().refine((val) => val !== undefined, 'Value cannot be undefined'),
 });
 
 export const DeletePayloadSchema: z.ZodType<{ key: string }> = z.object({
@@ -21,7 +21,7 @@ export const AlarmPayloadSchema: z.ZodType<{ timestamp: number }> = z.object({
 export const ImportPayloadSchema: z.ZodType<{ data: Record<string, unknown> }> = z.object({
   data: z.record(
     z.string().min(1, 'Key cannot be empty').refine(val => new TextEncoder().encode(val).length <= MAX_KEY_BYTES, `Key cannot exceed ${MAX_KEY_BYTES} bytes`), 
-    z.unknown()
+    z.unknown().refine((val) => val !== undefined, 'Value cannot be undefined')
   ).refine((data) => Object.keys(data).length <= MAX_IMPORT_KEYS, {
     message: ERROR_MESSAGES.PAYLOAD_TOO_LARGE,
   }),
