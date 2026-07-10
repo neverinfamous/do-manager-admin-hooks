@@ -21,14 +21,21 @@ import type {
  */
 
 /**
- * Timing-safe string comparison to prevent timing attacks
+ * Timing-safe string comparison to prevent timing attacks.
+ * Hashes both strings via Web Crypto before comparing to prevent length-leaking.
  */
-function timingSafeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-
+async function timingSafeEqual(a: string, b: string): Promise<boolean> {
+  const encoder = new TextEncoder();
+  
+  const hashA = await crypto.subtle.digest('SHA-256', encoder.encode(a));
+  const hashB = await crypto.subtle.digest('SHA-256', encoder.encode(b));
+  
+  const arrayA = new Uint8Array(hashA);
+  const arrayB = new Uint8Array(hashB);
+  
   let result = 0;
-  for (let i = 0; i < a.length; i++) {
-    result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  for (let i = 0; i < arrayA.length; i++) {
+    result |= arrayA[i] ^ arrayB[i];
   }
   return result === 0;
 }
@@ -42,6 +49,9 @@ export const HTTP_STATUS = {
   NOT_FOUND: 404,
   INTERNAL_SERVER_ERROR: 500,
 } as const;
+
+const DEFAULT_LIST_LIMIT = 1000;
+const MAX_LIST_LIMIT = 5000;
 
 const PutPayloadSchema = z.object({
   key: z.string().min(1, 'Key cannot be empty'),
@@ -65,7 +75,7 @@ const ImportPayloadSchema = z.object({
 });
 
 const QuerySchema = z.object({
-  limit: z.number().int().min(1).max(5000).optional(),
+  limit: z.number().int().min(1).max(MAX_LIST_LIMIT).optional(),
   cursor: z.string().optional(),
 });
 
@@ -115,11 +125,6 @@ function hasSqlBackend(
  */
 const FROZEN_STORAGE_KEY = "__do_manager_frozen";
 const FROZEN_AT_STORAGE_KEY = "__do_manager_frozen_at";
-
-/**
- * Default limit for list and export operations
- */
-const DEFAULT_LIST_LIMIT = 1000;
 
 /**
  * Cloudflare Durable Objects limit put() to 128 keys per operation
@@ -243,6 +248,17 @@ async function safeParseJson(request: Request): Promise<unknown> {
 }
 
 /**
+ * Helper to build options for KV/DO storage listing
+ */
+function buildListOptions(limit: number, cursor?: string): DurableObjectListOptions {
+  const options: DurableObjectListOptions = { limit };
+  if (cursor) {
+    options.startAfter = cursor;
+  }
+  return options;
+}
+
+/**
  * Creates a Durable Object base class with admin hooks for DO Manager integration.
  *
  * @param options - Configuration options for admin hooks
@@ -315,10 +331,7 @@ export function withAdminHooks<Env = unknown>(
           );
         }
 
-        if (
-          providedKey.length !== expectedKey.length ||
-          !timingSafeEqual(providedKey, expectedKey)
-        ) {
+        if (!(await timingSafeEqual(providedKey, expectedKey))) {
           return createErrorResponse("Unauthorized", HTTP_STATUS.UNAUTHORIZED);
         }
       }
@@ -424,9 +437,12 @@ export function withAdminHooks<Env = unknown>(
     async adminList(limit = DEFAULT_LIST_LIMIT, cursor?: string): Promise<AdminListResponse> {
       // Check for SQLite backend
       if (hasSqlBackend(this.state.storage)) {
-        const parsedOffset = cursor ? parseInt(cursor, 10) : 0;
-        const offset = isNaN(parsedOffset) ? 0 : parsedOffset;
-        const safeLimit = Math.min(Math.max(1, limit), 5000);
+        const offset = cursor ? parseInt(cursor, 10) : 0;
+        if (isNaN(offset)) {
+          throw new Error("Invalid cursor format for SQLite backend");
+        }
+        
+        const safeLimit = Math.min(Math.max(1, limit), MAX_LIST_LIMIT);
         
         const result = this.state.storage.sql.exec<{ name: string }>(
           `${SQLITE_INTROSPECTION_QUERY} LIMIT ${safeLimit} OFFSET ${offset}`
@@ -438,10 +454,7 @@ export function withAdminHooks<Env = unknown>(
       }
 
       // KV backend
-      const options: DurableObjectListOptions = { limit };
-      if (cursor) {
-        options.startAfter = cursor;
-      }
+      const options = buildListOptions(limit, cursor);
       
       const entries = await this.state.storage.list(options);
       const keys = [...entries.keys()];
@@ -520,10 +533,7 @@ export function withAdminHooks<Env = unknown>(
      * Export all storage data
      */
     async adminExport(limit = DEFAULT_LIST_LIMIT, cursor?: string): Promise<AdminExportResponse> {
-      const options: DurableObjectListOptions = { limit };
-      if (cursor) {
-        options.startAfter = cursor;
-      }
+      const options = buildListOptions(limit, cursor);
       const entries = await this.state.storage.list(options);
       const data: Record<string, unknown> = {};
 
