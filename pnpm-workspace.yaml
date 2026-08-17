@@ -1,2 +1,9 @@
+packages:
+  - "."
 allowBuilds:
   esbuild: true
+patchedDependencies:
+  bundle-require@5.1.0: patches/bundle-require.patch
+  tsup@8.5.1: patches/tsup.patch
+overrides:
+  esbuild: "^0.28.2"
