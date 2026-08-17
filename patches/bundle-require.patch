@@ -1,0 +1,22 @@
+diff --git a/package.json b/package.json
+index e817cabc1dd7224a7c52782dbbfcbb92f9ddb876..2405aa2b7a5eb5c69ff546b4be24aa29fdc4f468 100644
+--- a/package.json
++++ b/package.json
+@@ -26,7 +26,7 @@
+   "devDependencies": {
+     "@egoist/prettier-config": "1.0.0",
+     "@types/node": "18.11.18",
+-    "esbuild": "0.18.20",
++    "esbuild": "^0.28.1",
+     "prettier": "2.8.3",
+     "tsup": "6.5.0",
+     "typescript": "4.9.5",
+@@ -36,7 +36,7 @@
+     "load-tsconfig": "^0.2.3"
+   },
+   "peerDependencies": {
+-    "esbuild": ">=0.18"
++    "esbuild": ">=0.28.1"
+   },
+   "engines": {
+     "node": "^12.20.0 || ^14.13.1 || >=16.0.0"
